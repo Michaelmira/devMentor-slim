@@ -78,11 +78,16 @@ const CalendlyAvailability = ({ mentorId, mentor }) => {
 
   // Enhanced Calendly event listener with better error handling
   useCalendlyEventListener({
+    // onEventScheduled is not suitable for "Payment First" if Calendly creates the event immediately.
+    // We will now focus on onDateAndTimeSelected for the simplified flow.
+    /*
     onEventScheduled: (e) => {
       console.log("--- CALENDLY EVENT SCHEDULED DEBUG START ---");
       console.log("Full event object (e):", e);
       console.log("e.data structure:", e.data);
       console.log("e.data.payload structure:", e.data?.payload);
+      // console.log("Full e.data.payload.event object:", JSON.stringify(e.data?.payload?.event, null, 2)); 
+      // console.log("Full e.data.payload.invitee object:", JSON.stringify(e.data?.payload?.invitee, null, 2));
 
       let eventData = null;
       let inviteeData = null;
@@ -91,30 +96,25 @@ const CalendlyAvailability = ({ mentorId, mentor }) => {
         console.log("Found event and invitee URIs in e.data.payload");
         eventData = e.data.payload.event;
         inviteeData = e.data.payload.invitee;
-        console.log("Full e.data.payload.event object:", JSON.stringify(e.data?.payload?.event, null, 2));
-        console.log("Full e.data.payload.invitee object:", JSON.stringify(e.data?.payload?.invitee, null, 2));
-
-        // Extract necessary details
-        // Event details are often nested within the invitee's scheduled_event object
-        const scheduledEventDetails = inviteeData?.scheduled_event || eventData; // Fallback to eventData if not in invitee
+        
+        const scheduledEventDetails = inviteeData?.scheduled_event || eventData;
 
         const plainEventData = {
-          uri: eventData.uri, // URI of the scheduled event itself
+          uri: eventData.uri, 
           start_time: scheduledEventDetails?.start_time,
           end_time: scheduledEventDetails?.end_time,
-          name: scheduledEventDetails?.name,             // Event name
+          name: scheduledEventDetails?.name,          
           location: typeof scheduledEventDetails?.location === 'string' ? scheduledEventDetails?.location : scheduledEventDetails?.location?.location,
-          invitee_uri: inviteeData.uri, // URI of the invitee record
+          invitee_uri: inviteeData.uri, 
           invitee_email: inviteeData.email,
           invitee_name: inviteeData.name,
-          invitee_questions_and_answers: inviteeData.questions_and_answers,
+          invitee_questions_and_answers: inviteeData.questions_and_answers, 
         };
 
         console.log("Successfully extracted event data from onEventScheduled:", plainEventData);
-        setSelectedTimeData(plainEventData); // This now contains the crucial URIs
+        setSelectedTimeData(plainEventData); 
         setShowCalendly(false);
 
-        // Proceed to auth/payment
         if (store.token && store.currentUserData) {
           setShowPaymentForm(true);
         } else {
@@ -124,11 +124,9 @@ const CalendlyAvailability = ({ mentorId, mentor }) => {
         console.error("Could not find valid event/invitee URI in onEventScheduled response");
         console.error("Full payload for onEventScheduled:", JSON.stringify(e.data?.payload, null, 2));
 
-        // Fallback: Still proceed but with limited data and a clear error state
-        // This might indicate an unexpected payload structure from Calendly
         const fallbackData = {
-          uri: null, // Critical piece missing
-          invitee_uri: null, // Critical piece missing
+          uri: null, 
+          invitee_uri: null, 
           start_time: e.data?.payload?.event?.start_time || new Date().toISOString(),
           end_time: e.data?.payload?.event?.end_time || new Date(Date.now() + 60 * 60 * 1000).toISOString(),
           error: "Calendly event scheduling data incomplete. Manual confirmation may be required."
@@ -145,13 +143,39 @@ const CalendlyAvailability = ({ mentorId, mentor }) => {
       }
       console.log("--- CALENDLY EVENT SCHEDULED DEBUG END ---");
     },
-    // You can keep onDateAndTimeSelected for other purposes if needed, e.g., UI updates
-    // but it should not be the primary source for event URI for booking.
+    */
     onDateAndTimeSelected: (e) => {
-      console.log("Calendly onDateAndTimeSelected fired (for informational purposes):", e.data);
-      console.log("onDateAndTimeSelected payload:", JSON.stringify(e.data?.payload, null, 2)); // Log to verify payload for proposed times
-      // Potentially use this to update UI, e.g., "You selected {time}"
-      // Do not use this to set selectedTimeData for booking finalization if onEventScheduled is primary.
+      console.log("Calendly onDateAndTimeSelected Fired. Event data (e.data):", e.data);
+      console.log("onDateAndTimeSelected payload (e.data.payload):", JSON.stringify(e.data?.payload, null, 2)); // Primary log for this approach
+
+      // Attempt to extract proposed start and end times
+      const proposedStartTime = e.data?.payload?.event?.startTime || e.data?.payload?.startTime || e.data?.payload?.start_time;
+      const proposedEndTime = e.data?.payload?.event?.endTime || e.data?.payload?.endTime || e.data?.payload?.end_time;
+      // TODO: Determine the correct path to event type name/details if needed for display
+      // const eventTypeName = e.data?.payload?.event?.name || e.data?.payload?.name;
+
+
+      if (proposedStartTime && proposedEndTime) {
+        setSelectedTimeData({
+          start_time: proposedStartTime,
+          end_time: proposedEndTime,
+          // name: eventTypeName, // Optional: if you want to display event type name
+          uri: null, // No URI at this stage for the simplified flow
+          invitee_uri: null, // No URI at this stage
+        });
+        setShowCalendly(false); // Hide Calendly
+        // Proceed to auth/payment
+        if (store.token && store.currentUserData) {
+          setShowPaymentForm(true);
+        } else {
+          setShowAuthForm(true);
+        }
+      } else {
+        console.error("onDateAndTimeSelected: Could not extract proposed start/end times from payload.", e.data?.payload);
+        // Handle error: Maybe show a message to the user to manually select or try again.
+        // For now, we won't proceed if times are not captured.
+        alert("Could not capture the selected time from Calendly. Please try selecting a time slot again, or contact support if the issue persists.");
+      }
     }
   });
 
