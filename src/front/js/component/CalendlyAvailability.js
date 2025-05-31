@@ -97,13 +97,12 @@ const CalendlyAvailability = ({ mentorId, mentor }) => {
           uri: eventData.uri,
           start_time: eventData.start_time,
           end_time: eventData.end_time,
-          name: eventData.name, // Event name
-          location: eventData.location?.location || eventData.location, // Handles object or string location
+          name: eventData.name,
+          location: typeof eventData.location === 'string' ? eventData.location : eventData.location?.location,
           invitee_uri: inviteeData.uri,
           invitee_email: inviteeData.email,
           invitee_name: inviteeData.name,
-          // You might want to capture other details from inviteeData if needed
-          // e.g., inviteeData.questions_and_answers
+          invitee_questions_and_answers: inviteeData.questions_and_answers,
         };
 
         console.log("Successfully extracted event data from onEventScheduled:", plainEventData);
