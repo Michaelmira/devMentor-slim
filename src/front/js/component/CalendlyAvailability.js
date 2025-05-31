@@ -149,6 +149,7 @@ const CalendlyAvailability = ({ mentorId, mentor }) => {
     // but it should not be the primary source for event URI for booking.
     onDateAndTimeSelected: (e) => {
       console.log("Calendly onDateAndTimeSelected fired (for informational purposes):", e.data);
+      console.log("onDateAndTimeSelected payload:", JSON.stringify(e.data?.payload, null, 2)); // Log to verify payload for proposed times
       // Potentially use this to update UI, e.g., "You selected {time}"
       // Do not use this to set selectedTimeData for booking finalization if onEventScheduled is primary.
     }
