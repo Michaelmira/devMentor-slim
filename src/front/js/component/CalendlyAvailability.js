@@ -78,75 +78,56 @@ const CalendlyAvailability = ({ mentorId, mentor }) => {
 
   // Enhanced Calendly event listener with better error handling
   useCalendlyEventListener({
-    onDateAndTimeSelected: (e) => {
-      console.log("--- CALENDLY EVENT DEBUG START ---");
+    onEventScheduled: (e) => {
+      console.log("--- CALENDLY EVENT SCHEDULED DEBUG START ---");
       console.log("Full event object (e):", e);
       console.log("e.data structure:", e.data);
-      console.log("Type of e.data.payload before check:", typeof e.data?.payload);
-
-      // Log the payload with more detail to see its true content
-      if (e.data && typeof e.data.payload !== 'undefined') {
-        console.log("e.data.payload (raw):", e.data.payload);
-        try {
-          // Attempt to stringify to catch circular references or complex objects
-          console.log("e.data.payload (stringified):", JSON.stringify(e.data.payload, null, 2));
-        } catch (err) {
-          console.error("Could not stringify e.data.payload:", err);
-        }
-      } else {
-        console.log("e.data.payload is undefined or e.data is missing.");
-      }
+      console.log("e.data.payload structure:", e.data?.payload);
 
       let eventData = null;
+      let inviteeData = null;
 
-      // Structure 1: e.data.payload.event (your current expectation)
-      if (e.data?.payload?.event) {
+      if (e.data?.payload?.event?.uri && e.data?.payload?.invitee?.uri) {
+        console.log("Found event and invitee URIs in e.data.payload");
         eventData = e.data.payload.event;
-        console.log("Found event data in payload.event:", eventData);
-      }
-      // Structure 2: e.data.event (alternative structure)
-      else if (e.data?.event) {
-        eventData = e.data.event;
-        console.log("Found event data in data.event:", eventData);
-      }
-      // Structure 3: Direct in payload
-      else if (e.data?.payload && (e.data.payload.uri || e.data.payload.start_time)) {
-        eventData = e.data.payload;
-        console.log("Found event data directly in payload:", eventData);
-      }
+        inviteeData = e.data.payload.invitee;
 
-      console.log("--- CALENDLY EVENT DEBUG END ---");
-
-      if (eventData && (eventData.uri || eventData.start_time)) {
+        // Extract necessary details
         const plainEventData = {
           uri: eventData.uri,
           start_time: eventData.start_time,
           end_time: eventData.end_time,
-          // Add any other fields that might be present
-          name: eventData.name,
-          location: eventData.location
+          name: eventData.name, // Event name
+          location: eventData.location?.location || eventData.location, // Handles object or string location
+          invitee_uri: inviteeData.uri,
+          invitee_email: inviteeData.email,
+          invitee_name: inviteeData.name,
+          // You might want to capture other details from inviteeData if needed
+          // e.g., inviteeData.questions_and_answers
         };
 
-        console.log("Successfully extracted event data:", plainEventData);
-        setSelectedTimeData(plainEventData);
+        console.log("Successfully extracted event data from onEventScheduled:", plainEventData);
+        setSelectedTimeData(plainEventData); // This now contains the crucial URIs
         setShowCalendly(false);
 
-        // Check if user is authenticated
+        // Proceed to auth/payment
         if (store.token && store.currentUserData) {
           setShowPaymentForm(true);
         } else {
           setShowAuthForm(true);
         }
       } else {
-        console.error("Could not find valid event data in Calendly response");
-        console.error("Full event structure:", JSON.stringify(e, null, 2));
+        console.error("Could not find valid event/invitee URI in onEventScheduled response");
+        console.error("Full payload for onEventScheduled:", JSON.stringify(e.data?.payload, null, 2));
 
-        // Fallback: Still proceed but with limited data
+        // Fallback: Still proceed but with limited data and a clear error state
+        // This might indicate an unexpected payload structure from Calendly
         const fallbackData = {
-          uri: null,
-          start_time: new Date().toISOString(), // Use current time as fallback
-          end_time: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour later
-          error: "Limited event data available"
+          uri: null, // Critical piece missing
+          invitee_uri: null, // Critical piece missing
+          start_time: e.data?.payload?.event?.start_time || new Date().toISOString(),
+          end_time: e.data?.payload?.event?.end_time || new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          error: "Calendly event scheduling data incomplete. Manual confirmation may be required."
         };
 
         setSelectedTimeData(fallbackData);
@@ -158,6 +139,14 @@ const CalendlyAvailability = ({ mentorId, mentor }) => {
           setShowAuthForm(true);
         }
       }
+      console.log("--- CALENDLY EVENT SCHEDULED DEBUG END ---");
+    },
+    // You can keep onDateAndTimeSelected for other purposes if needed, e.g., UI updates
+    // but it should not be the primary source for event URI for booking.
+    onDateAndTimeSelected: (e) => {
+      console.log("Calendly onDateAndTimeSelected fired (for informational purposes):", e.data);
+      // Potentially use this to update UI, e.g., "You selected {time}"
+      // Do not use this to set selectedTimeData for booking finalization if onEventScheduled is primary.
     }
   });
 
@@ -206,9 +195,11 @@ const CalendlyAvailability = ({ mentorId, mentor }) => {
       return;
     }
 
-    if (!selectedTimeData) {
-      console.error("handlePaymentSuccess: selectedTimeData is missing");
-      alert("Error: Selected time information is missing. Please contact support with your payment confirmation.");
+    if (!selectedTimeData || !selectedTimeData.uri || !selectedTimeData.invitee_uri) {
+      console.error("handlePaymentSuccess: selectedTimeData is missing crucial URI information from Calendly.");
+      alert("Error: Critical booking information from Calendly is missing. Please try scheduling again or contact support.");
+      setShowPaymentForm(false);
+      setShowCalendly(true);
       return;
     }
 
@@ -232,7 +223,7 @@ const CalendlyAvailability = ({ mentorId, mentor }) => {
       .then(success => {
         if (success) {
           console.log("Booking successfully tracked by backend");
-          console.log("Navigating with selectedTimeData:", selectedTimeData);
+          console.log("Navigating with selectedTimeData (should include URI):", selectedTimeData);
 
           navigate('/booking-details', {
             state: {
@@ -289,7 +280,10 @@ const CalendlyAvailability = ({ mentorId, mentor }) => {
             <InlineWidget
               url={calendlyUrl}
               styles={styles}
-              prefill={prefill}
+              prefill={{
+                name: store.currentUserData?.user_data?.name || '',
+                email: store.currentUserData?.user_data?.email || '',
+              }}
               utm={utm}
               onLoad={handleCalendlyLoad}
               onError={handleCalendlyError}
