@@ -91,6 +91,7 @@ const CalendlyAvailability = ({ mentorId, mentor }) => {
         console.log("Found event and invitee URIs in e.data.payload");
         eventData = e.data.payload.event;
         inviteeData = e.data.payload.invitee;
+        console.log("Full e.data.payload.event object:", JSON.stringify(e.data?.payload?.event, null, 2));
 
         // Extract necessary details
         const plainEventData = {
