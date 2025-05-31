@@ -92,15 +92,19 @@ const CalendlyAvailability = ({ mentorId, mentor }) => {
         eventData = e.data.payload.event;
         inviteeData = e.data.payload.invitee;
         console.log("Full e.data.payload.event object:", JSON.stringify(e.data?.payload?.event, null, 2));
+        console.log("Full e.data.payload.invitee object:", JSON.stringify(e.data?.payload?.invitee, null, 2));
 
         // Extract necessary details
+        // Event details are often nested within the invitee's scheduled_event object
+        const scheduledEventDetails = inviteeData?.scheduled_event || eventData; // Fallback to eventData if not in invitee
+
         const plainEventData = {
-          uri: eventData.uri,
-          start_time: eventData.start_time,
-          end_time: eventData.end_time,
-          name: eventData.name,
-          location: typeof eventData.location === 'string' ? eventData.location : eventData.location?.location,
-          invitee_uri: inviteeData.uri,
+          uri: eventData.uri, // URI of the scheduled event itself
+          start_time: scheduledEventDetails?.start_time,
+          end_time: scheduledEventDetails?.end_time,
+          name: scheduledEventDetails?.name,             // Event name
+          location: typeof scheduledEventDetails?.location === 'string' ? scheduledEventDetails?.location : scheduledEventDetails?.location?.location,
+          invitee_uri: inviteeData.uri, // URI of the invitee record
           invitee_email: inviteeData.email,
           invitee_name: inviteeData.name,
           invitee_questions_and_answers: inviteeData.questions_and_answers,
