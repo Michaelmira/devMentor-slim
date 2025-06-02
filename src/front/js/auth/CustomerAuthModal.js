@@ -1,3 +1,5 @@
+// CustomerAuthModal.js
+
 import React, { useState, useEffect, useRef } from 'react';
 import { CustomerLogin } from './CustomerLogin.js';
 import { CustomerSignup } from './CustomerSignup.js';

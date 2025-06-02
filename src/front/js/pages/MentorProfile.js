@@ -1,6 +1,6 @@
 import React, { useState, useContext, useEffect } from "react";
 import { Context } from "../store/appContext";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import Select from "react-select";
 import CreatableSelect from "react-select/creatable";
 import {
@@ -26,8 +26,8 @@ import "react-phone-input-2/lib/style.css";
 import ProfilePhoto from "../component/ProfilePhoto";
 import PortfolioImage from "../component/PortfolioImage";
 import { ChangePsModal } from "../auth/ChangePsModal";
-import { GoogleAuthMentor } from "../component/GoogleAuthMentor";
-import { StripeConnect } from "../component/StripeConnect";
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 import { InvalidItem } from "../component/InvalidItem";
 
@@ -35,8 +35,13 @@ import userIcon from "../../img/user-3296.png";
 
 import "../../styles/mentorProfile.css";
 
+import { CalendlyConnectionHandler } from "../component/CalendlyConnectionHandler";
+import { AuthDebugComponent } from "../component/AuthDebugComponet";
+
 export const MentorProfile = () => {
   const { actions } = useContext(Context);
+  const location = useLocation();
+  const navigate = useNavigate();
   const [showChangePsModal, setShowChangePsModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [uploadedImages, setUploadedImages] = useState([]);
@@ -70,7 +75,18 @@ export const MentorProfile = () => {
     days: [],
     price: null,
     about_me: "",
+    calendly_url: "",
+    is_calendly_connected: false,
   });
+  const [mentorData, setMentorData] = useState(null);
+  const [calendlyStatus, setCalendlyStatus] = useState({
+    connected: false,
+    loading: true,
+    userName: null,
+    userEmail: null,
+    error: null
+  });
+
 
   useEffect(() => {
     if (mentorId) {
@@ -94,26 +110,43 @@ export const MentorProfile = () => {
     fetchMentorData();
   }, []);
 
+  useEffect(() => {
+    const queryParams = new URLSearchParams(location.search);
+    const calendlySuccess = queryParams.get('calendly_success');
+    const calendlyError = queryParams.get('calendly_error');
+
+    if (calendlySuccess === 'true') {
+      toast.success("Calendly connected successfully!");
+      fetchMentorData();
+      navigate(location.pathname, { replace: true });
+    } else if (calendlyError) {
+      let errorMessage = "Failed to connect Calendly.";
+      switch (calendlyError) {
+        case 'state_mismatch':
+          errorMessage = "Calendly connection failed: State mismatch. Please try again.";
+          break;
+        case 'auth_failed_callback':
+          errorMessage = "Calendly connection failed: Could not identify your account after returning from Calendly. Please ensure you are logged in and try again.";
+          break;
+        default:
+          errorMessage = `An unexpected error occurred while connecting Calendly: ${calendlyError}. Please try again or contact support.`;
+          break;
+      }
+      toast.error(errorMessage, { autoClose: 8000 });
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location, navigate, actions]);
+
   const profileImageUrl = mentor.profile_photo?.image_url || userIcon;
   const profileImagePositionX = mentor.profile_photo?.position_x || 0;
   const profileImagePositionY = mentor.profile_photo?.position_y || 0;
   const profileImageScale = mentor.profile_photo?.scale || 1;
-  // const portfolioImageUrls = mentor?.portfolio_photos?.length > 0 ? mentor.portfolio_photos : placeholderImages;
   const portfolioImageUrls = mentor?.portfolio_photos || [];
-
-  // const [loading, setLoading] = useState(true);
-  // if (loading) {
-  // 	return <div>Loading...</div>;
-  // }
-  // if (!mentor) {
-  // 	return <div>Mentor not found</div>;
-  // }
 
   const handleCancelChanges = async () => {
     setInvalidItems([]);
     setPhoneError("");
     setPreviewImg(null);
-    // setMentor(originalMentor);
     setEditMode(false);
     setUploadedPortfolioImages([]);
     setUploadedImages([]);
@@ -122,12 +155,6 @@ export const MentorProfile = () => {
     setImageSizeError(false);
     setPortfolioImgSizeError(false);
 
-    // const data = await actions.getCurrentMentor();
-    // if (data) {
-    // 	setMentor(data);
-    // 	setOriginalMentor(data);
-    // 	setCharacterCount(data.about_me?.length || 0);
-    // }
     fetchMentorData();
   };
 
@@ -308,13 +335,6 @@ export const MentorProfile = () => {
     e.preventDefault();
     setIsSaving(true);
 
-    // if (mentor.price === "None") {
-    // 	setMentor((prevMentorInfo) => ({
-    // 		...prevMentorInfo,
-    // 		price: null,
-    // 	}));
-    // 	return;
-    // }
     try {
       setInvalidItems([]);
       let isPriceValid = ValidatePrice(
@@ -344,14 +364,12 @@ export const MentorProfile = () => {
         isStateValid &&
         isAboutMeValid
       ) {
-        // Handle profile photo
         if (isMarkedForDeletion) {
           await actions.deleteProfilePhoto();
         } else if (uploadedImages.length > 0) {
           await handleNewImage();
         }
 
-        // Handle portfolio images
         await handlePortfolioImages();
         if (markedForDeletion.length > 0) {
           await handleDeletePortfolioImages(markedForDeletion);
@@ -391,19 +409,70 @@ export const MentorProfile = () => {
     }
   };
 
-  // console.log("mentor price", mentor.price)
+  // In your MentorProfile.js useEffect where you handle Calendly
+  useEffect(() => {
+    const checkCalendlyConnection = async () => {
+      // Handle OAuth callback first
+      const callbackResult = CalendlyConnectionHandler.handleOAuthCallback();
+
+      if (callbackResult === 'success') {
+        // Show success message
+        toast.success("Calendly connected successfully!");
+
+        // Wait a moment then refresh connection status
+        setTimeout(async () => {
+          const result = await CalendlyConnectionHandler.testCalendlyConnection();
+          setCalendlyStatus({
+            connected: result.connected,
+            loading: false,
+            userName: result.userName || null,
+            userEmail: result.userEmail || null,
+            error: result.error || null
+          });
+        }, 1000);
+      } else if (callbackResult && callbackResult.error) {
+        // Show error message
+        toast.error(callbackResult.error);
+      }
+
+      // Always check current connection status
+      const result = await CalendlyConnectionHandler.testCalendlyConnection();
+      setCalendlyStatus({
+        connected: result.connected,
+        loading: false,
+        userName: result.userName || null,
+        userEmail: result.userEmail || null,
+        error: result.error || null
+      });
+    };
+
+    checkCalendlyConnection();
+  }, []);
+
+  const handleConnectCalendly = async () => {
+    setCalendlyStatus(prev => ({ ...prev, loading: true }));
+    await CalendlyConnectionHandler.handleConnectCalendly();
+  };
+
+  const handleDisconnectCalendly = async () => {
+    const success = await CalendlyConnectionHandler.handleDisconnectCalendly();
+    if (success) {
+      setCalendlyStatus({
+        connected: false,
+        loading: false,
+        userName: null,
+        userEmail: null,
+        error: null
+      });
+    }
+  };
 
   return (
     <div className="container card border-secondary shadow border-2 pt-0 mentor-profile">
+      <AuthDebugComponent /> {/* Add this temporarily */}
       <div id="header" className="card-header bg-light-subtle">
         <h2 className="my-2 header-text d-flex align-items-center justify-content-center">
           Mentor Profile
-          {/* {editMode == false
-						? (<button onClick={() => setEditMode(true)} className="btn btn-secondary fa-solid fa-pencil ms-4"></button>)
-						: ''
-					} */}
-          <GoogleAuthMentor mentorId={mentorId} />
-          <StripeConnect />
         </h2>
         {!mentor.is_active && (
           <div className="alert alert-warning" role="alert">
@@ -414,7 +483,6 @@ export const MentorProfile = () => {
       </div>
 
       <div className={`row px-4 ${editMode ? "pt-5" : "pt-3"}`}>
-        {/* {editMode ? "border-container" : ""} */}
         <div className="d-flex justify-content-end">
           {editMode == false ? (
             <button
@@ -425,7 +493,6 @@ export const MentorProfile = () => {
             ""
           )}
         </div>
-        {/* <div className="col-5 mb-4"> */}
         <div className="col-12 col-md-5 mb-4 profile-section">
           <div className="d-flex justify-content-center">
             <ProfilePhoto
@@ -461,7 +528,6 @@ export const MentorProfile = () => {
             setPortfolioImgSizeError={setPortfolioImgSizeError}
           />
         </div>
-        {/* <div className="col-7 pe-5"> */}
         <div className="col-12 col-md-7 info-column">
           <dl className="row">
             <dt className="col-sm-4 form-label">Email:</dt>
@@ -545,6 +611,21 @@ export const MentorProfile = () => {
               )}
             </dd>
 
+            <dt className="col-sm-4 form-label">Calendly Url:</dt>
+            <dd className="col-sm-8">
+              {editMode ? (
+                <input
+                  type="text"
+                  name="calendly_url"
+                  value={mentor.calendly_url}
+                  onChange={handleChange}
+                  className="form-control"
+                />
+              ) : (
+                mentor.calendly_url
+              )}
+            </dd>
+
             <dt className="col-sm-4 form-label">Phone:</dt>
             <dd className="col-sm-8">
               {editMode ? (
@@ -566,25 +647,6 @@ export const MentorProfile = () => {
                   {phoneError && <InvalidItem error={phoneError} />}
                 </>
               ) : (
-                // <PhoneInput
-                // 	disabled
-                // 	country={'us'}
-                // 	value={mentor.phone}
-                // 	onChange={handlePhoneChange}
-                // 	inputClass="form-control disabled border-0"
-                // 	inputStyle={{
-                // 		height: '25px',
-                // 		fontSize: '16px',
-                // 		padding: '0px',
-                // 		margin: '0px',
-                // 		lineHeight: 'auto',
-                // 		width: '100%'
-                // 	}}
-                // 	buttonStyle={{
-                // 		display: 'none'
-                // 	}}
-                // />
-
                 <PhoneInput
                   readOnly
                   enableSearch={false}
@@ -721,7 +783,6 @@ export const MentorProfile = () => {
                     (skill) => !mentor.skills?.includes(skill.label)
                   )}
                   closeMenuOnSelect={false}
-                  // styles={customStyles}
                 />
               ) : (
                 mentor.skills?.join(", ")
@@ -766,7 +827,6 @@ export const MentorProfile = () => {
                     />
                     <span className="input-group-text">/hr</span>
                   </div>
-                  {/* TODO: Make sure the invalideItems errors go away/reset if you hit 'cancel changes' button */}
                   {invalidItems.includes("price") && (
                     <InvalidItem error="Invalid price value (ex. 20.00)" />
                   )}
@@ -791,9 +851,8 @@ export const MentorProfile = () => {
                   ></textarea>
                   <span className="d-flex flex-row">
                     <p
-                      className={`mb-0 ${
-                        CharacterCount > 2500 ? "text-danger" : ""
-                      }`}
+                      className={`mb-0 ${CharacterCount > 2500 ? "text-danger" : ""
+                        }`}
                     >
                       {CharacterCount}
                     </p>
@@ -818,12 +877,6 @@ export const MentorProfile = () => {
               >
                 Cancel
               </button>
-              {/* <button
-                className="btn btn-success small-button"
-                onClick={handleSubmit}
-              >
-                Save Changes
-              </button> */}
               <button
                 className="btn btn-success small-button d-flex align-items-center justify-content-center gap-2"
                 onClick={handleSubmit}
@@ -871,6 +924,100 @@ export const MentorProfile = () => {
           onHide={() => setShowChangePsModal(false)}
         />
       )}
+
+      <div className="card mb-4">
+        <div className="card-header">
+          <h5 className="mb-0">📅 Calendly Integration</h5>
+        </div>
+        <div className="card-body">
+          {calendlyStatus.loading ? (
+            <div className="d-flex align-items-center">
+              <div className="spinner-border spinner-border-sm me-2" role="status">
+                <span className="visually-hidden">Loading...</span>
+              </div>
+              <span>Checking Calendly connection...</span>
+            </div>
+          ) : calendlyStatus.connected ? (
+            <div className="calendly-connected">
+              <div className="alert alert-success d-flex align-items-center" role="alert">
+                <i className="bi bi-check-circle-fill me-2"></i>
+                <strong>Calendly Connected Successfully!</strong>
+              </div>
+
+              <div className="connection-details mb-3">
+                {calendlyStatus.userName && (
+                  <p className="mb-1">
+                    <strong>Connected as:</strong> {calendlyStatus.userName}
+                  </p>
+                )}
+                {calendlyStatus.userEmail && (
+                  <p className="mb-1">
+                    <strong>Email:</strong> {calendlyStatus.userEmail}
+                  </p>
+                )}
+              </div>
+
+              <div className="d-flex gap-2">
+                <button
+                  onClick={handleDisconnectCalendly}
+                  className="btn btn-outline-danger btn-sm"
+                >
+                  <i className="bi bi-unlink me-1"></i>
+                  Disconnect Calendly
+                </button>
+
+                <button
+                  onClick={async () => {
+                    setCalendlyStatus(prev => ({ ...prev, loading: true }));
+                    const result = await CalendlyConnectionHandler.testCalendlyConnection();
+                    setCalendlyStatus({
+                      connected: result.connected,
+                      loading: false,
+                      userName: result.userName || null,
+                      userEmail: result.userEmail || null,
+                      error: result.error || null
+                    });
+                  }}
+                  className="btn btn-outline-secondary btn-sm"
+                >
+                  <i className="bi bi-arrow-clockwise me-1"></i>
+                  Test Connection
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="calendly-disconnected">
+              <div className="alert alert-info d-flex align-items-center" role="alert">
+                <i className="bi bi-info-circle-fill me-2"></i>
+                <div>
+                  <strong>Connect your Calendly account</strong>
+                  <div className="small">Enable appointment scheduling for your mentees by connecting your Calendly account.</div>
+                </div>
+              </div>
+
+              {calendlyStatus.error && (
+                <div className="alert alert-warning d-flex align-items-center" role="alert">
+                  <i className="bi bi-exclamation-triangle-fill me-2"></i>
+                  <div>
+                    <strong>Connection Issue:</strong> {calendlyStatus.error}
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={handleConnectCalendly}
+                className="btn btn-primary"
+                disabled={calendlyStatus.loading}
+              >
+                <i className="bi bi-calendar-plus me-1"></i>
+                {calendlyStatus.loading ? 'Connecting...' : 'Connect Calendly'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <ToastContainer position="top-right" autoClose={5000} newestOnTop={true} />
     </div>
   );
 };

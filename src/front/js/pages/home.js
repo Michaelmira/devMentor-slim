@@ -13,7 +13,6 @@ export const Home = () => {
 				<div className="container">
 					<h1 className="header-background">Learn from the best. Find your mentor.</h1>
 					<p className="lead header-background text-white">devMentor is the easiest way to connect with experienced developers for one-on-one mentorship. Whether you're new to coding or an experienced developer looking to level up, we'll help you find the perfect mentor.</p>
-					// Replace your search-container div with this code in your Home.js
 
 					<div className="search-container">
 						<a
