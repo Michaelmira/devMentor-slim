@@ -40,6 +40,7 @@ from decimal import Decimal
 
 from dotenv import load_dotenv
 
+
 # Load environment variables
 load_dotenv()
 FRONTEND_URL = os.getenv("FRONTEND_URL") or "http://localhost:3000"
