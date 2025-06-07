@@ -115,6 +115,7 @@ export const CalendlyAvailability = ({ mentorId, mentor, onPaymentSuccess, onCan
   // Auth form handlers
   const handleLoginSuccess = () => {
     setShowAuthForm(false);
+    setShowVerifyCode(false); // Ensure verification modal is hidden
     setShowPaymentForm(true);
   };
 
@@ -126,8 +127,15 @@ export const CalendlyAvailability = ({ mentorId, mentor, onPaymentSuccess, onCan
 
   const handleVerificationComplete = () => {
     setShowVerifyCode(false);
-    setActiveAuthTab('login'); // Switch back to login tab
-    setShowAuthForm(true); // Show auth form again for login
+    // Check if user is now logged in after verification
+    if (store.token && store.currentUserData) {
+      // User is logged in, proceed to payment
+      setShowPaymentForm(true);
+    } else {
+      // User still needs to log in
+      setActiveAuthTab('login'); // Switch back to login tab
+      setShowAuthForm(true); // Show auth form again for login
+    }
   };
 
   const handleSwitchTab = (tab) => {
@@ -245,7 +253,7 @@ export const CalendlyAvailability = ({ mentorId, mentor, onPaymentSuccess, onCan
               onClose={handleCancel}
               switchToLogin={handleVerificationComplete}
             />
-
+            
             <div className="text-center mt-3">
               <button
                 className="btn btn-secondary"
@@ -361,3 +369,5 @@ export const CalendlyAvailability = ({ mentorId, mentor, onPaymentSuccess, onCan
     </div>
   );
 };
+
+export default CalendlyAvailability;

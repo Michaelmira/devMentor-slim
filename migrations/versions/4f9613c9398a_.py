@@ -1,8 +1,8 @@
 """empty message
 
-Revision ID: 8e4de973fbd2
+Revision ID: 4f9613c9398a
 Revises: 
-Create Date: 2025-06-02 01:44:43.195267
+Create Date: 2025-06-07 07:05:35.480278
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '8e4de973fbd2'
+revision = '4f9613c9398a'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -29,6 +29,8 @@ def upgrade():
     sa.Column('last_active', sa.DateTime(timezone=True), nullable=True),
     sa.Column('date_joined', sa.DateTime(timezone=True), nullable=True),
     sa.Column('about_me', sa.String(length=2500), nullable=True),
+    sa.Column('is_verified', sa.Boolean(), nullable=False),
+    sa.Column('verification_code', sa.String(length=6), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_customer_email'), 'customer', ['email'], unique=True)
@@ -57,6 +59,8 @@ def upgrade():
     sa.Column('price', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('date_joined', sa.DateTime(timezone=True), nullable=True),
     sa.Column('google_oauth_credentials', sa.Text(), nullable=True),
+    sa.Column('is_verified', sa.Boolean(), nullable=False),
+    sa.Column('verification_code', sa.String(length=6), nullable=True),
     sa.Column('stripe_account_id', sa.String(length=255), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('stripe_account_id')
@@ -71,12 +75,12 @@ def upgrade():
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('paid_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('scheduled_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('calendly_event_uri', sa.Text(), nullable=True),
-    sa.Column('calendly_invitee_uri', sa.Text(), nullable=True),
-    sa.Column('calendly_event_start_time', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('calendly_event_end_time', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('invitee_name', sa.String(length=200), nullable=True),
-    sa.Column('invitee_email', sa.String(length=120), nullable=True),
+    sa.Column('calendly_event_uri', sa.String(length=255), nullable=True),
+    sa.Column('calendly_invitee_uri', sa.String(length=255), nullable=True),
+    sa.Column('calendly_event_start_time', sa.DateTime(), nullable=True),
+    sa.Column('calendly_event_end_time', sa.DateTime(), nullable=True),
+    sa.Column('invitee_name', sa.String(length=255), nullable=True),
+    sa.Column('invitee_email', sa.String(length=255), nullable=True),
     sa.Column('invitee_notes', sa.Text(), nullable=True),
     sa.Column('stripe_payment_intent_id', sa.String(length=255), nullable=True),
     sa.Column('amount_paid', sa.Numeric(precision=10, scale=2), nullable=True),
@@ -84,11 +88,12 @@ def upgrade():
     sa.Column('platform_fee', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('mentor_payout_amount', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('status', sa.Enum('PENDING_PAYMENT', 'PAID', 'CONFIRMED', 'CANCELLED_BY_CUSTOMER', 'CANCELLED_BY_MENTOR', 'COMPLETED', 'REFUNDED', name='bookingstatus'), nullable=False),
+    sa.Column('google_meet_link', sa.String(length=255), nullable=True),
     sa.ForeignKeyConstraint(['customer_id'], ['customer.id'], ),
     sa.ForeignKeyConstraint(['mentor_id'], ['mentor.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('stripe_payment_intent_id')
     )
-    op.create_index(op.f('ix_booking_stripe_payment_intent_id'), 'booking', ['stripe_payment_intent_id'], unique=False)
     op.create_table('customer_image',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('public_id', sa.String(length=500), nullable=False),
@@ -132,7 +137,6 @@ def downgrade():
     op.drop_table('portfolio_photo')
     op.drop_table('mentor_image')
     op.drop_table('customer_image')
-    op.drop_index(op.f('ix_booking_stripe_payment_intent_id'), table_name='booking')
     op.drop_table('booking')
     op.drop_index(op.f('ix_mentor_phone'), table_name='mentor')
     op.drop_index(op.f('ix_mentor_email'), table_name='mentor')
