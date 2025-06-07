@@ -13,52 +13,49 @@ export const MentorDashboard = () => {
 	const navigate = useNavigate();
 
 	useEffect(() => {
-		// Check for social login token
-		if (actions.handleSocialLoginToken()) {
-			// Token was found and stored, now verify the user
-			actions.getCurrentUser();
-		} else if (!sessionStorage.getItem("token")) {
-			navigate("/login");
-		} else {
-			actions.getCurrentUser();
-		}
-	}, []);
-
-	useEffect(() => {
-		const fetchMentorData = async () => {
+		const verifyUser = async () => {
 			try {
-				if (!store.currentUserData?.user_data) {
-					const data = await actions.getCurrentUser();
-					if (data && data.user_data) setMentorData(data.user_data);
-				} else {
-					setMentorData(store.currentUserData.user_data);
+				// Check for social login token
+				const hasSocialToken = actions.handleSocialLoginToken();
+				console.log("Social token check:", hasSocialToken);
+
+				// Get the token from sessionStorage
+				const token = sessionStorage.getItem("token");
+				if (!token) {
+					console.log("No token found, redirecting to login");
+					navigate("/login");
+					return;
 				}
 
-				if (store.currentUserData?.role === 'mentor') {
-					const mentorBookings = await actions.getMentorBookings();
-					setBookings(mentorBookings || []);
+				// Verify the user
+				const userData = await actions.getCurrentUser();
+				console.log("User data:", userData);
+
+				if (!userData || userData.role !== 'mentor') {
+					console.log("User is not a mentor, redirecting to login");
+					navigate("/login");
+					return;
 				}
+
+				// Set mentor data
+				setMentorData(userData.user_data);
+
+				// Fetch mentor bookings
+				const mentorBookings = await actions.getMentorBookings();
+				setBookings(mentorBookings || []);
 			} catch (err) {
-				setError('Failed to fetch dashboard data.');
-				console.error(err);
+				console.error("Error verifying user:", err);
+				navigate("/login");
 			} finally {
 				setLoading(false);
 			}
 		};
 
-		if (store.token) {
-			fetchMentorData();
-		} else {
-			setLoading(false);
-		}
-	}, [store.currentUserData, store.token, actions]);
+		verifyUser();
+	}, []);
 
 	if (loading) {
 		return <div className="container text-center"><h2>Loading Dashboard...</h2></div>;
-	}
-
-	if (!store.token || store.currentUserData?.role !== 'mentor') {
-		return <div className="container"><h2>Please log in as a mentor to see your dashboard.</h2></div>;
 	}
 
 	if (error) {

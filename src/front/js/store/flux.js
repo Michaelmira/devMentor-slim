@@ -29,7 +29,6 @@ const getState = ({ getStore, getActions, setStore }) => {
                     if (!token) {
                         console.error("No token found in sessionStorage");
                         getActions().logOut();
-                        alert("Your login token has expired. Please log in again to continue.");
                         return false;
                     }
                     const response = await fetch(`${process.env.BACKEND_URL}/api/current/user`, {
@@ -41,36 +40,48 @@ const getState = ({ getStore, getActions, setStore }) => {
                     });
                     if (response.ok) {
                         const data = await response.json();
-                        // console.log("userdata from token", data);
-                        if (data.role == "mentor") {
+                        console.log("userdata from token", data);
+                        if (data.role === "mentor") {
                             setStore({
+                                token: token,
                                 isMentorLoggedIn: true,
+                                isCustomerLoggedIn: false,
                                 currentUserData: data,
-                                mentorId: data.user_data.id
+                                mentorId: data.user_data.id,
+                                customerId: null
                             });
+                            sessionStorage.setItem("token", token);
                             sessionStorage.setItem("isMentorLoggedIn", "true");
-                            return true;
+                            sessionStorage.setItem("isCustomerLoggedIn", "false");
+                            sessionStorage.setItem("mentorId", data.user_data.id);
+                            sessionStorage.setItem("currentUserData", JSON.stringify(data));
+                            return data;
                         }
-                        if (data.role == "customer") {
+                        if (data.role === "customer") {
                             setStore({
+                                token: token,
+                                isMentorLoggedIn: false,
                                 isCustomerLoggedIn: true,
                                 currentUserData: data,
-                                customerId: data.user_data.id
+                                customerId: data.user_data.id,
+                                mentorId: null
                             });
+                            sessionStorage.setItem("token", token);
+                            sessionStorage.setItem("isMentorLoggedIn", "false");
                             sessionStorage.setItem("isCustomerLoggedIn", "true");
-                            return true;
+                            sessionStorage.setItem("customerId", data.user_data.id);
+                            sessionStorage.setItem("currentUserData", JSON.stringify(data));
+                            return data;
                         }
+                        return false;
                     } else {
                         console.error("get current user status:", response.status);
                         getActions().logOut();
-                        alert("Your login token has expired. Please log in again to continue.");
                         return false;
                     }
                 } catch (error) {
                     console.error("Failed to fetch current user:", error);
                     getActions().logOut();
-                    // alert("Connection error. Please check your internet connection. Otherwise, our server is down at the moment. Please try again at another time.");
-                    alert("Token has expired. Please log in again to continue.");
                     return false;
                 }
             },
@@ -1245,12 +1256,13 @@ const getState = ({ getStore, getActions, setStore }) => {
                     const token = urlParams.get('token');
                     if (token) {
                         console.log("Found token in URL, storing in sessionStorage");
+                        // Store token in sessionStorage and store
                         sessionStorage.setItem('token', token);
+                        setStore({ token: token });
+
                         // Remove token from URL without reloading the page
                         const newUrl = window.location.pathname;
                         window.history.replaceState({}, document.title, newUrl);
-                        // Set the token in the store
-                        setStore({ token: token });
                         return true;
                     }
                     return false;

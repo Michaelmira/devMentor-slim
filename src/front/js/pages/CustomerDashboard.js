@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { Context } from '../store/appContext';
 import { useNavigate } from "react-router-dom";
 
@@ -10,58 +10,43 @@ const CustomerDashboard = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        const initializeDashboard = async () => {
+        const verifyUser = async () => {
             try {
-                // First check for social login token
-                if (actions.handleSocialLoginToken()) {
-                    console.log("Social login token found and stored");
-                }
+                // Check for social login token
+                const hasSocialToken = actions.handleSocialLoginToken();
+                console.log("Social token check:", hasSocialToken);
 
-                // Then verify the user
-                const isVerified = await actions.getCurrentUser();
-                if (!isVerified) {
-                    console.log("User verification failed, redirecting to login");
+                // Get the token from sessionStorage
+                const token = sessionStorage.getItem("token");
+                if (!token) {
+                    console.log("No token found, redirecting to login");
                     navigate("/login");
                     return;
                 }
 
-                // If we get here, the user is verified
-                console.log("User verified successfully");
-            } catch (error) {
-                console.error("Error initializing dashboard:", error);
-                setError("Failed to initialize dashboard. Please try again.");
+                // Verify the user
+                const userData = await actions.getCurrentUser();
+                console.log("User data:", userData);
+
+                if (!userData || userData.role !== 'customer') {
+                    console.log("User is not a customer, redirecting to login");
+                    navigate("/login");
+                    return;
+                }
+
+                // Fetch customer bookings
+                const customerBookings = await actions.getCustomerBookings();
+                setBookings(customerBookings || []);
+            } catch (err) {
+                console.error("Error verifying user:", err);
                 navigate("/login");
             } finally {
                 setLoading(false);
             }
         };
 
-        initializeDashboard();
+        verifyUser();
     }, []);
-
-    useEffect(() => {
-        const fetchBookings = async () => {
-            if (store.currentUserData?.role !== 'customer') {
-                setLoading(false);
-                return;
-            }
-            try {
-                const userBookings = await actions.getCustomerBookings();
-                setBookings(userBookings || []);
-            } catch (err) {
-                setError('Failed to fetch your bookings. Please try again later.');
-                console.error(err);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        if (store.token) {
-            fetchBookings();
-        } else {
-            setLoading(false);
-        }
-    }, [store.currentUserData, store.token, actions]);
 
     // Helper function to get the correct date/time to display
     const getBookingDateTime = (booking) => {
@@ -76,10 +61,6 @@ const CustomerDashboard = () => {
 
     if (loading) {
         return <div className="container text-center"><h2>Loading Dashboard...</h2></div>;
-    }
-
-    if (!store.token || store.currentUserData?.role !== 'customer') {
-        return <div className="container"><h2>Please log in as a customer to see your dashboard.</h2></div>;
     }
 
     if (error) {
