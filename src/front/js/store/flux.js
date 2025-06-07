@@ -48,6 +48,7 @@ const getState = ({ getStore, getActions, setStore }) => {
                                 currentUserData: data,
                                 mentorId: data.user_data.id
                             });
+                            sessionStorage.setItem("isMentorLoggedIn", "true");
                             return true;
                         }
                         if (data.role == "customer") {
@@ -56,6 +57,7 @@ const getState = ({ getStore, getActions, setStore }) => {
                                 currentUserData: data,
                                 customerId: data.user_data.id
                             });
+                            sessionStorage.setItem("isCustomerLoggedIn", "true");
                             return true;
                         }
                     } else {
