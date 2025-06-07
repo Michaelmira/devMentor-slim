@@ -6,6 +6,7 @@ import { Context } from "../store/appContext";
 import PhoneInput from 'react-phone-input-2'
 import 'react-phone-input-2/lib/style.css'
 import { ValidateEmail, ValidateFirstName, ValidateLastName, ValidatePassword, ValidatePhone, } from "../component/Validators";
+import { SocialLogins } from "./SocialLogins";
 
 
 export const CustomerSignup = ({ switchToLogin, onSignupSuccess }) => {
@@ -225,15 +226,13 @@ export const CustomerSignup = ({ switchToLogin, onSignupSuccess }) => {
                         </button>
                     </div>
 
-                    <div className="text-center text-secondary small-font">
+                    <div className="col-12 mt-2 text-center text-secondary small-font">
                         Already have an account?
-                        <span
-                            onClick={() => { switchToLogin() }}
-                            className="ms-1 text-secondary auth-link"
-                        >
+                        <span onClick={() => switchToLogin()} className="ms-1 text-secondary auth-link">
                             Login
                         </span>
                     </div>
+                    <SocialLogins />
                 </div>
             </div>
         </form>

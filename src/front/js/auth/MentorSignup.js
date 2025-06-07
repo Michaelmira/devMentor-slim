@@ -7,6 +7,8 @@ import { ValidateEmail, ValidateFirstName, ValidateLastName, ValidatePassword, V
 import Select from 'react-select';
 import CreatableSelect from "react-select/creatable";
 import { stateOptions, countryOptions } from "../store/data";
+import "react-phone-input-2/lib/style.css";
+import { SocialLogins } from "./SocialLogins";
 
 
 export const MentorSignup = ({ switchToLogin, onSignupSuccess }) => {
@@ -301,6 +303,7 @@ export const MentorSignup = ({ switchToLogin, onSignupSuccess }) => {
                             Login
                         </span>
                     </div>
+                    <SocialLogins />
                 </div>
             </div>
         </form>
