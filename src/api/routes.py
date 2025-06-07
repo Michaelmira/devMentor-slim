@@ -21,7 +21,7 @@ from api.models import db, Mentor, Customer, MentorImage, PortfolioPhoto, Bookin
 from api.utils import generate_sitemap, APIException
 from api.decorators import mentor_required, customer_required
 from api.send_email import send_email, send_verification_email_code
-from src.app import oauth # Import the oauth object
+from .extensions import oauth # Import the oauth object from the local extensions file
 
 import pytz
 from enum import Enum as PyEnum

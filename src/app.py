@@ -12,9 +12,9 @@ from api.utils import APIException, generate_sitemap
 from api.models import db
 from api.routes import api
 from api.admin import setup_admin
+from api.extensions import oauth # Import from new extensions file
 from werkzeug.middleware.proxy_fix import ProxyFix
 from datetime import timedelta
-from authlib.integrations.flask_client import OAuth
 
 
 # from models import Person
@@ -25,9 +25,10 @@ static_file_dir = os.path.join(os.path.dirname(
 app = Flask(__name__)
 app.url_map.strict_slashes = False
 
-# Initialize OAuth
-oauth = OAuth(app)
+# Initialize OAuth with the app
+oauth.init_app(app)
 
+# Register providers on the oauth object
 oauth.register(
     name='google',
     client_id=os.getenv('GOOGLE_CLIENT_ID'),
