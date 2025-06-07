@@ -1,11 +1,43 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { Context } from '../store/appContext';
+import { useNavigate } from "react-router-dom";
 
 const CustomerDashboard = () => {
     const { store, actions } = useContext(Context);
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        const initializeDashboard = async () => {
+            try {
+                // First check for social login token
+                if (actions.handleSocialLoginToken()) {
+                    console.log("Social login token found and stored");
+                }
+
+                // Then verify the user
+                const isVerified = await actions.getCurrentUser();
+                if (!isVerified) {
+                    console.log("User verification failed, redirecting to login");
+                    navigate("/login");
+                    return;
+                }
+
+                // If we get here, the user is verified
+                console.log("User verified successfully");
+            } catch (error) {
+                console.error("Error initializing dashboard:", error);
+                setError("Failed to initialize dashboard. Please try again.");
+                navigate("/login");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        initializeDashboard();
+    }, []);
 
     useEffect(() => {
         const fetchBookings = async () => {
@@ -36,9 +68,9 @@ const CustomerDashboard = () => {
         // Use calendly_event_start_time if available (actual meeting time)
         // Otherwise fall back to scheduled_at (booking creation time)
         const dateToUse = booking.calendly_event_start_time || booking.scheduled_at;
-        
+
         if (!dateToUse) return 'Not scheduled';
-        
+
         return new Date(dateToUse).toLocaleString();
     };
 

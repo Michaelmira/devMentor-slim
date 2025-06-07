@@ -2,6 +2,7 @@ import React, { useContext, useState, useEffect } from "react";
 import { Context } from "../store/appContext";
 import { CalendlyAvailability } from "../component/CalendlyAvailability";
 import { MentorAvailability } from "../component/MentorAvailability";
+import { useNavigate } from "react-router-dom";
 
 export const MentorDashboard = () => {
 	const { store, actions } = useContext(Context);
@@ -9,6 +10,19 @@ export const MentorDashboard = () => {
 	const [bookings, setBookings] = useState([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState(null);
+	const navigate = useNavigate();
+
+	useEffect(() => {
+		// Check for social login token
+		if (actions.handleSocialLoginToken()) {
+			// Token was found and stored, now verify the user
+			actions.getCurrentUser();
+		} else if (!sessionStorage.getItem("token")) {
+			navigate("/login");
+		} else {
+			actions.getCurrentUser();
+		}
+	}, []);
 
 	useEffect(() => {
 		const fetchMentorData = async () => {

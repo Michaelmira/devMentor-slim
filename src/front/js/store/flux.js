@@ -1237,6 +1237,27 @@ const getState = ({ getStore, getActions, setStore }) => {
                     console.error("Error syncing booking details:", error);
                     return { success: false, error: error.message };
                 }
+            },
+
+            handleSocialLoginToken: () => {
+                try {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const token = urlParams.get('token');
+                    if (token) {
+                        console.log("Found token in URL, storing in sessionStorage");
+                        sessionStorage.setItem('token', token);
+                        // Remove token from URL without reloading the page
+                        const newUrl = window.location.pathname;
+                        window.history.replaceState({}, document.title, newUrl);
+                        // Set the token in the store
+                        setStore({ token: token });
+                        return true;
+                    }
+                    return false;
+                } catch (error) {
+                    console.error("Error handling social login token:", error);
+                    return false;
+                }
             }
         }
     };

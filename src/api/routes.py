@@ -43,7 +43,7 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-FRONTEND_URL = os.getenv("FRONTEND_URL") or "http://localhost:3000"
+FRONTEND_URL = os.getenv("FRONTEND_URL") or "https://verbose-meme-975xp7gqvvwh99jw-3000.app.github.dev"
 BACKEND_URL = os.getenv("BACKEND_URL") or "http://localhost:3001"
 
 # Stripe API Setup
@@ -1948,6 +1948,7 @@ def authorize(name):
                     is_verified=True  # Social logins are considered verified
                 )
             else:
+                # For mentors, we need to provide all required fields
                 user = Mentor(
                     email=email,
                     first_name=first_name,
@@ -1955,9 +1956,12 @@ def authorize(name):
                     phone=email,  # Using email as a unique placeholder
                     password=random_password,
                     is_verified=True,  # Social logins are considered verified
-                    city="",  # Required fields with default values
-                    what_state="",
-                    country=""
+                    city="Please update your city",  # Placeholder values
+                    what_state="Please update your state",
+                    country="Please update your country",
+                    bio="Welcome to devMentor! Please update your bio to help potential clients learn more about you.",
+                    hourly_rate=0,  # Default hourly rate
+                    is_active=True  # Default to active
                 )
             
             db.session.add(user)
