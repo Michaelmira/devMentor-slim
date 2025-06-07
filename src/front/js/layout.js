@@ -20,6 +20,7 @@ import { BookingDetailsPage } from "./pages/BookingDetailsPage";
 import { BookingConfirmedPage } from "./pages/BookingConfirmedPage";
 import CustomerDashboard from "./pages/CustomerDashboard";
 import CustomerProfile from "./pages/CustomerProfile";
+import { LoginSuccess } from "./pages/LoginSuccess";
 
 
 //create your first component
@@ -65,6 +66,7 @@ const Layout = () => {
                         <Route element={<CustomerDashboard />} path="/customer-dashboard" />
                         <Route element={<MentorProfile />} path="/mentor-profile" />
                         <Route element={<MentorDashboard />} path="/mentor-dashboard" />
+                        <Route element={<LoginSuccess />} path="/login-success" />
                         <Route element={<BookingDetailsPage />} path="/booking-details" />
                         <Route element={<BookingConfirmedPage />} path="/booking-confirmed/:bookingId" />
                         <Route element={<h1>Not found!</h1>} path="*" />

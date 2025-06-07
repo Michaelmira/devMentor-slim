@@ -21,6 +21,7 @@ from api.models import db, Mentor, Customer, MentorImage, PortfolioPhoto, Bookin
 from api.utils import generate_sitemap, APIException
 from api.decorators import mentor_required, customer_required
 from api.send_email import send_email, send_verification_email_code
+from src.app import oauth # Import the oauth object
 
 import pytz
 from enum import Enum as PyEnum
@@ -1868,3 +1869,61 @@ def reschedule_booking():
     db.session.refresh(booking)
 
     return jsonify({"success": True, "message": "Booking rescheduled successfully"}), 200
+
+@api.route('/login/<name>')
+def social_login(name):
+    client = oauth.create_client(name)
+    if not client:
+        return jsonify({"msg": "Invalid social login provider"}), 404
+    
+    redirect_uri = url_for('api.authorize', name=name, _external=True)
+    return client.authorize_redirect(redirect_uri)
+
+@api.route('/authorize/<name>')
+def authorize(name):
+    client = oauth.create_client(name)
+    if not client:
+        return jsonify({"msg": "Invalid social login provider"}), 404
+    
+    token = client.authorize_access_token()
+    
+    # For Google, userinfo is in the 'userinfo' part of the token
+    # For GitHub, you get it directly from the client after getting the token
+    if name == 'google':
+        user_info = token.get('userinfo')
+        if not user_info:
+             user_info = client.userinfo(token=token)
+    elif name == 'github':
+        user_info = client.get('user', token=token).json()
+    else:
+        return jsonify({"msg": "Unhandled provider"}), 400
+
+    email = user_info.get('email')
+    if not email:
+        return jsonify({"msg": "Email not provided by social provider"}), 400
+
+    # Check if user exists as a Customer or Mentor
+    user = Customer.query.filter_by(email=email).first()
+    role = "customer"
+    if not user:
+        user = Mentor.query.filter_by(email=email).first()
+        role = "mentor"
+
+    # If user does not exist, create a new one.
+    # For now, we'll default to creating a Customer.
+    # A real application might redirect to a page to ask for the role.
+    if not user:
+        role = "customer" # Default role
+        user = Customer(
+            email=email,
+            first_name=user_info.get('given_name') or user_info.get('name', '').split()[0],
+            last_name=user_info.get('family_name') or (user_info.get('name', '').split()[-1] if ' ' in user_info.get('name', '') else ''),
+            is_verified=True # Social logins are considered verified
+        )
+        db.session.add(user)
+        db.session.commit()
+
+    # Create JWT and redirect to frontend
+    access_token = create_access_token(identity=user.id, additional_claims={"role": role})
+    # Redirect to a frontend route that can handle the token
+    return redirect(f"{FRONTEND_URL}/login-success?token={access_token}")

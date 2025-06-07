@@ -1,0 +1,43 @@
+import React, { useEffect, useContext } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Context } from '../store/appContext';
+
+export const LoginSuccess = () => {
+    const { actions } = useContext(Context);
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        const queryParams = new URLSearchParams(location.search);
+        const token = queryParams.get('token');
+
+        if (token) {
+            actions.handleLoginSuccess(token);
+            // After handling the login, getCurrentUser will determine the role
+            // and redirect to the correct dashboard.
+            actions.getCurrentUser().then(success => {
+                if (success) {
+                    const role = sessionStorage.getItem("isMentorLoggedIn") === "true" ? "mentor" : "customer";
+                    if (role === 'mentor') {
+                        navigate('/mentor-dashboard');
+                    } else {
+                        navigate('/customer-dashboard');
+                    }
+                } else {
+                    // Handle case where token is valid but user fetch fails
+                    navigate('/');
+                }
+            });
+        } else {
+            // No token found, redirect to home
+            navigate('/');
+        }
+    }, [location, navigate, actions]);
+
+    return (
+        <div className="container text-center mt-5">
+            <h2>Login Successful</h2>
+            <p>Redirecting to your dashboard...</p>
+        </div>
+    );
+}; 

@@ -1,6 +1,7 @@
 import React, { useContext, useState } from "react";
 import { Context } from "../store/appContext";
 import { ValidateEmail, ValidatePassword } from "../component/Validators";
+import { SocialLogins } from "./SocialLogins";
 
 
 export const MentorLogin = ({ onSuccess, switchToSignUp, onForgotPs }) => {
@@ -102,6 +103,7 @@ export const MentorLogin = ({ onSuccess, switchToSignUp, onForgotPs }) => {
                             Create an account
                         </span>
                     </div>
+                    <SocialLogins />
                 </div>
             </div>
         </form>

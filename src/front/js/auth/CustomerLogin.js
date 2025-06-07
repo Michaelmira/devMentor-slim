@@ -3,6 +3,7 @@
 import React, { useContext, useState } from "react";
 import { Context } from "../store/appContext";
 import { ValidateEmail, ValidatePassword } from "../component/Validators"; // Ensure path is correct
+import { SocialLogins } from "./SocialLogins";
 
 
 export const CustomerLogin = ({ onSuccess, switchToSignUp, onForgotPs }) => {
@@ -108,6 +109,7 @@ export const CustomerLogin = ({ onSuccess, switchToSignUp, onForgotPs }) => {
                             </span>
                         </div>
                     </div>
+                    <SocialLogins />
                 </div>
             </div>
         </form>

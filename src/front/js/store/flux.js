@@ -25,11 +25,18 @@ const getState = ({ getStore, getActions, setStore }) => {
 
             getCurrentUser: async () => {
                 try {
+                    const token = getStore().token || sessionStorage.getItem('token');
+                    if (!token) {
+                        console.error("No token found in sessionStorage");
+                        getActions().logOut();
+                        alert("Your login token has expired. Please log in again to continue.");
+                        return false;
+                    }
                     const response = await fetch(`${process.env.BACKEND_URL}/api/current/user`, {
                         method: "GET",
                         headers: {
                             "Content-Type": "application/json",
-                            "Authorization": "Bearer " + sessionStorage.getItem('token')
+                            "Authorization": "Bearer " + token
                         }
                     });
                     if (response.ok) {
@@ -359,29 +366,20 @@ const getState = ({ getStore, getActions, setStore }) => {
             },
 
             logOut: () => {
-                // if (getStore().isMentorLoggedIn) {
-                //     window.location.href = process.env.FRONTEND_URL + "/mentor-login"
-                // }
-                // if (getStore().isCustomerLoggedIn) {
-                //     window.location.href = process.env.FRONTEND_URL + "/customer-login"
-                // }
-
+                sessionStorage.clear();
                 setStore({
-                    token: undefined,
-                    customerId: undefined,
-                    mentorId: undefined,
                     isMentorLoggedIn: false,
                     isCustomerLoggedIn: false,
-                    currentUserData: null
+                    token: null,
+                    currentUserData: null,
+                    mentorId: null,
+                    customerId: null,
                 });
+            },
 
-                sessionStorage.clear();
-                // -- or -- (remove specific items from sessionStorage)
-                // sessionStorage.removeItem("token");
-                // sessionStorage.removeItem("customerId");
-
-                // console.log("Logged out. Updated store:", getStore());
-                console.log("Logged out. Token should be undefined:", getStore().token === undefined);
+            handleLoginSuccess: (token) => {
+                sessionStorage.setItem("token", token);
+                setStore({ token: token });
             },
 
             signUpCustomer: async (customer) => {
@@ -1030,7 +1028,7 @@ const getState = ({ getStore, getActions, setStore }) => {
                         console.error("No token found for fetchCalendlyDetailsAndUpdateBooking");
                         return { success: false, message: "Authentication required." };
                     }
-            
+
                     // FIXED: Use the correct endpoint that exists in your routes.py
                     const response = await fetch(`${process.env.BACKEND_URL}/api/sync_booking_with_calendly_details`, {
                         method: "POST",
@@ -1045,9 +1043,9 @@ const getState = ({ getStore, getActions, setStore }) => {
                             mentorId: mentorId
                         })
                     });
-            
+
                     const data = await response.json();
-            
+
                     if (response.ok) {
                         return { success: true, ...data };
                     } else {
