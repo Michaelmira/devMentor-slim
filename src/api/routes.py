@@ -1915,10 +1915,14 @@ def authorize(name):
     # A real application might redirect to a page to ask for the role.
     if not user:
         role = "customer" # Default role
+        # Generate a random password and use email as a placeholder for phone
+        random_password = generate_password_hash(secrets.token_urlsafe(16))
         user = Customer(
             email=email,
             first_name=user_info.get('given_name') or user_info.get('name', '').split()[0],
             last_name=user_info.get('family_name') or (user_info.get('name', '').split()[-1] if ' ' in user_info.get('name', '') else ''),
+            phone=email,  # Using email as a unique placeholder
+            password=random_password, # Setting a secure random password
             is_verified=True # Social logins are considered verified
         )
         db.session.add(user)
