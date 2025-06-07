@@ -63,37 +63,38 @@ alwaysApply: true
 - **Status:** ✅ DONE (Handled by Calendly)
 - **Details:** Booking confirmations, reminders, and cancellations are managed directly through Calendly's robust notification system, simplifying the MVP.
 
+### 6. Email Verification System
+- **Status:** ✅ DONE
+- Email verification on signup
+- Developer bypass code for testing
+- Verification code generation and validation
+- Secure verification process
+
 ---
 
 ## 🚧 MVP COMPLETION TASKS
 
 ### Phase 1: Essential User Experience (Week 1-2)
 
-#### A. Email Verification on Signup
-- **Priority:** HIGH
-- Send a verification email upon user registration.
-- Users must click a link in the email to verify their account before logging in.
-- Include a developer bypass code (`999000`) for faster testing.
-
-#### B. Social Logins
+#### A. Social Logins
 - **Priority:** MEDIUM
 - Add Google and GitHub login/signup buttons for both mentors and clients.
 
-#### C. Cancellation System
+#### B. Cancellation System
 - **Priority:** HIGH
 - Client-initiated cancellations (with refund policy)
 - Mentor-initiated cancellations (with rescheduling)
 - Automated calendar updates
 - Refund processing workflow
 
-#### D. Payment & Financial Management
+#### C. Payment & Financial Management
 - **Priority:** HIGH
 - Transaction history for users
 - Basic payout system for mentors
 - Payment failure handling
 - Receipt generation
 
-#### E. Basic Admin Panel
+#### D. Basic Admin Panel
 - **Priority:** MEDIUM
 - Monitor bookings and transactions
 - Basic mentor approval workflow

@@ -1,8 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 
-export const SocialLogins = () => {
+export const SocialLogins = ({ userType = 'customer' }) => {
+    const [error, setError] = useState('');
+
     const handleSocialLogin = (provider) => {
-        window.location.href = `${process.env.BACKEND_URL}/api/login/${provider}`;
+        try {
+            // Add userType to the URL to indicate whether this is a mentor or customer login
+            window.location.href = `${process.env.BACKEND_URL}/api/login/${provider}?user_type=${userType}`;
+        } catch (err) {
+            setError('Failed to initiate social login. Please try again.');
+            console.error('Social login error:', err);
+        }
     };
 
     return (
@@ -12,12 +20,37 @@ export const SocialLogins = () => {
                 <span className="px-2 text-muted">or</span>
                 <hr className="flex-grow-1" />
             </div>
+            {error && (
+                <div className="alert alert-danger mb-3" role="alert">
+                    {error}
+                </div>
+            )}
             <div className="d-grid gap-2">
-                <button className="btn btn-outline-light" onClick={() => handleSocialLogin('google')}>
-                    <i className="fab fa-google me-2"></i> Continue with Google
+                <button
+                    className="btn btn-outline-light"
+                    onClick={() => handleSocialLogin('google')}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '10px'
+                    }}
+                >
+                    <i className="fab fa-google"></i>
+                    Continue with Google
                 </button>
-                <button className="btn btn-outline-light" onClick={() => handleSocialLogin('github')}>
-                    <i className="fab fa-github me-2"></i> Continue with GitHub
+                <button
+                    className="btn btn-outline-light"
+                    onClick={() => handleSocialLogin('github')}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '10px'
+                    }}
+                >
+                    <i className="fab fa-github"></i>
+                    Continue with GitHub
                 </button>
             </div>
         </React.Fragment>

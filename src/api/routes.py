@@ -183,7 +183,7 @@ def verify_code():
         return jsonify({"msg": "User not found"}), 404
     
     # Developer bypass code
-    if code == "999000":
+    if code == os.getenv('VERIFICATION_BYPASS_CODE'):
         user.is_verified = True
         user.verification_code = None
         db.session.commit()
@@ -1873,62 +1873,108 @@ def reschedule_booking():
 
 @api.route('/login/<name>')
 def social_login(name):
+    if name not in ['google', 'github']:
+        return jsonify({"msg": "Invalid social login provider"}), 404
+    
+    user_type = request.args.get('user_type', 'customer')
+    if user_type not in ['customer', 'mentor']:
+        return jsonify({"msg": "Invalid user type"}), 400
+    
+    # Store user_type in session for use in callback
+    session['social_login_user_type'] = user_type
+    
     client = oauth.create_client(name)
     if not client:
-        return jsonify({"msg": "Invalid social login provider"}), 404
+        return jsonify({"msg": "Social login provider not configured"}), 500
     
     redirect_uri = url_for('api.authorize', name=name, _external=True)
     return client.authorize_redirect(redirect_uri)
 
 @api.route('/authorize/<name>')
 def authorize(name):
-    client = oauth.create_client(name)
-    if not client:
+    if name not in ['google', 'github']:
         return jsonify({"msg": "Invalid social login provider"}), 404
     
-    token = client.authorize_access_token()
+    client = oauth.create_client(name)
+    if not client:
+        return jsonify({"msg": "Social login provider not configured"}), 500
     
-    # For Google, userinfo is in the 'userinfo' part of the token
-    # For GitHub, you get it directly from the client after getting the token
-    if name == 'google':
-        user_info = token.get('userinfo')
-        if not user_info:
-             user_info = client.userinfo(token=token)
-    elif name == 'github':
-        user_info = client.get('user', token=token).json()
-    else:
-        return jsonify({"msg": "Unhandled provider"}), 400
+    try:
+        token = client.authorize_access_token()
+        
+        # Get user info based on provider
+        if name == 'google':
+            user_info = token.get('userinfo')
+            if not user_info:
+                user_info = client.userinfo(token=token)
+        elif name == 'github':
+            user_info = client.get('user', token=token).json()
+            # For GitHub, we need to make an additional request to get the email
+            if not user_info.get('email'):
+                emails = client.get('user/emails', token=token).json()
+                primary_email = next((email['email'] for email in emails if email['primary']), None)
+                if primary_email:
+                    user_info['email'] = primary_email
+        
+        email = user_info.get('email')
+        if not email:
+            return jsonify({"msg": "Email not provided by social provider"}), 400
 
-    email = user_info.get('email')
-    if not email:
-        return jsonify({"msg": "Email not provided by social provider"}), 400
+        # Get the user type from session
+        user_type = session.pop('social_login_user_type', 'customer')
+        
+        # Check if user exists
+        if user_type == 'customer':
+            user = Customer.query.filter_by(email=email).first()
+        else:
+            user = Mentor.query.filter_by(email=email).first()
 
-    # Check if user exists as a Customer or Mentor
-    user = Customer.query.filter_by(email=email).first()
-    role = "customer"
-    if not user:
-        user = Mentor.query.filter_by(email=email).first()
-        role = "mentor"
+        # If user doesn't exist, create a new one
+        if not user:
+            # Generate a random password
+            random_password = generate_password_hash(secrets.token_urlsafe(16))
+            
+            # Get name from user info
+            first_name = user_info.get('given_name') or user_info.get('name', '').split()[0]
+            last_name = user_info.get('family_name') or (user_info.get('name', '').split()[-1] if ' ' in user_info.get('name', '') else '')
+            
+            if user_type == 'customer':
+                user = Customer(
+                    email=email,
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone=email,  # Using email as a unique placeholder
+                    password=random_password,
+                    is_verified=True  # Social logins are considered verified
+                )
+            else:
+                user = Mentor(
+                    email=email,
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone=email,  # Using email as a unique placeholder
+                    password=random_password,
+                    is_verified=True,  # Social logins are considered verified
+                    city="",  # Required fields with default values
+                    what_state="",
+                    country=""
+                )
+            
+            db.session.add(user)
+            db.session.commit()
 
-    # If user does not exist, create a new one.
-    # For now, we'll default to creating a Customer.
-    # A real application might redirect to a page to ask for the role.
-    if not user:
-        role = "customer" # Default role
-        # Generate a random password and use email as a placeholder for phone
-        random_password = generate_password_hash(secrets.token_urlsafe(16))
-        user = Customer(
-            email=email,
-            first_name=user_info.get('given_name') or user_info.get('name', '').split()[0],
-            last_name=user_info.get('family_name') or (user_info.get('name', '').split()[-1] if ' ' in user_info.get('name', '') else ''),
-            phone=email,  # Using email as a unique placeholder
-            password=random_password, # Setting a secure random password
-            is_verified=True # Social logins are considered verified
+        # Create access token
+        access_token = create_access_token(
+            identity=user.id,
+            additional_claims={"role": user_type}
         )
-        db.session.add(user)
-        db.session.commit()
 
-    # Create JWT and redirect to frontend
-    access_token = create_access_token(identity=user.id, additional_claims={"role": role})
-    # Redirect to a frontend route that can handle the token
-    return redirect(f"{FRONTEND_URL}/login-success?token={access_token}")
+        # Redirect to frontend with token
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+        redirect_url = f"{frontend_url}/{'mentor' if user_type == 'mentor' else 'customer'}-dashboard?token={access_token}"
+        return redirect(redirect_url)
+
+    except Exception as e:
+        current_app.logger.error(f"Social login error: {str(e)}")
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+        return redirect(f"{frontend_url}/login?error=social_login_failed")

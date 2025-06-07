@@ -108,8 +108,8 @@ export const CustomerLogin = ({ onSuccess, switchToSignUp, onForgotPs }) => {
                                 Create an account
                             </span>
                         </div>
+                        <SocialLogins userType="customer" />
                     </div>
-                    <SocialLogins />
                 </div>
             </div>
         </form>

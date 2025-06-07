@@ -103,7 +103,7 @@ export const MentorLogin = ({ onSuccess, switchToSignUp, onForgotPs }) => {
                             Create an account
                         </span>
                     </div>
-                    <SocialLogins />
+                    <SocialLogins userType="mentor" />
                 </div>
             </div>
         </form>
