@@ -14,9 +14,20 @@ export const CustomerAuthModal = ({ initialTab, show, onHide }) => {
   const [showForgotPs, setShowForgotPs] = useState(false);
   const [showVerifyCode, setShowVerifyCode] = useState(false);
   const [emailForVerification, setEmailForVerification] = useState("");
+  const [socialLoginError, setSocialLoginError] = useState("");
   const modalRef = useRef(null);
   const bsModalRef = useRef(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check for social login error in sessionStorage
+    const error = sessionStorage.getItem('social_login_error');
+    if (error) {
+      setSocialLoginError(error);
+      // Clear the error from sessionStorage
+      sessionStorage.removeItem('social_login_error');
+    }
+  }, []);
 
   useEffect(() => {
     if (modalRef.current && window.bootstrap) {
@@ -25,6 +36,7 @@ export const CustomerAuthModal = ({ initialTab, show, onHide }) => {
         if (onHide) onHide();
         setShowForgotPs(false);
         setShowVerifyCode(false);
+        setSocialLoginError(""); // Clear any error when modal is closed
       });
     }
     return () => {
@@ -134,6 +146,11 @@ export const CustomerAuthModal = ({ initialTab, show, onHide }) => {
                 />
               </div>
               <div className="modal-body p-4">
+                {socialLoginError && (
+                  <div className="alert alert-danger" role="alert">
+                    {socialLoginError}
+                  </div>
+                )}
                 {activeTab === 'login' ? (
                   <CustomerLogin
                     onSuccess={() => {

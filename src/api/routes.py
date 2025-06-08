@@ -1871,7 +1871,7 @@ def reschedule_booking():
 
     return jsonify({"success": True, "message": "Booking rescheduled successfully"}), 200
 
-@api.route('/login/<name>')
+@api.route('/login/<n>')
 def social_login(name):
     if name not in ['google', 'github']:
         return jsonify({"msg": "Invalid social login provider"}), 404
@@ -1880,8 +1880,9 @@ def social_login(name):
     if user_type not in ['customer', 'mentor']:
         return jsonify({"msg": "Invalid user type"}), 400
     
-    # Store user_type in session for use in callback
+    # Store user_type and return path in session for use in callback
     session['social_login_user_type'] = user_type
+    session['original_path'] = request.args.get('return_path', '')
     
     client = oauth.create_client(name)
     if not client:
@@ -1981,4 +1982,8 @@ def authorize(name):
     except Exception as e:
         current_app.logger.error(f"Social login error: {str(e)}")
         frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
-        return redirect(f"{frontend_url}/login?error=social_login_failed")
+        # Get the user type from session and include it in redirect
+        user_type = session.get('social_login_user_type', 'customer')
+        # Get the original path from the session or default to home
+        original_path = session.get('original_path', '')
+        return redirect(f"{frontend_url}{original_path}?error=social_login_failed&user_type={user_type}")

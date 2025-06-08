@@ -3,7 +3,7 @@ import { MentorLogin } from "./MentorLogin.js";
 import { MentorSignup } from "./MentorSignup.js";
 import { ForgotPsModal } from './ForgotPsModal.js';
 import { VerifyCodeModal } from './VerifyCodeModal.js';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import "../../styles/auth.css";
 
 
@@ -12,9 +12,21 @@ export const MentorAuthModal = ({ initialTab, show, onHide }) => {
     const [showForgotPs, setShowForgotPs] = useState(false);
     const [showVerifyCode, setShowVerifyCode] = useState(false);
     const [emailForVerification, setEmailForVerification] = useState("");
+    const [searchParams] = useSearchParams();
+    const [socialLoginError, setSocialLoginError] = useState("");
     const modalRef = useRef(null);
     const bsModalRef = useRef(null);
     const navigate = useNavigate();
+
+    useEffect(() => {
+        // Check for social login error in sessionStorage
+        const error = sessionStorage.getItem('social_login_error');
+        if (error) {
+            setSocialLoginError(error);
+            // Clear the error from sessionStorage
+            sessionStorage.removeItem('social_login_error');
+        }
+    }, []);
 
     useEffect(() => {
         if (modalRef.current && window.bootstrap) {
@@ -23,6 +35,7 @@ export const MentorAuthModal = ({ initialTab, show, onHide }) => {
                 if (onHide) onHide();
                 setShowForgotPs(false);
                 setShowVerifyCode(false);
+                setSocialLoginError(""); // Clear any error when modal is closed
             });
         }
         return () => {
@@ -132,6 +145,11 @@ export const MentorAuthModal = ({ initialTab, show, onHide }) => {
                                 </div>
                             </div>
                             <div className="modal-body p-4">
+                                {socialLoginError && (
+                                    <div className="alert alert-danger" role="alert">
+                                        {socialLoginError}
+                                    </div>
+                                )}
                                 {activeTab === 'login' ? (
                                     <MentorLogin
                                         onSuccess={() => {

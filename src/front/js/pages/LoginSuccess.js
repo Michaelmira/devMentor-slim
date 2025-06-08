@@ -1,15 +1,17 @@
 import React, { useEffect, useContext } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Context } from '../store/appContext';
 
 export const LoginSuccess = () => {
     const { actions } = useContext(Context);
     const location = useLocation();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
 
     useEffect(() => {
         const queryParams = new URLSearchParams(location.search);
         const token = queryParams.get('token');
+        const error = searchParams.get('error');
 
         if (token) {
             actions.handleLoginSuccess(token);
@@ -28,11 +30,16 @@ export const LoginSuccess = () => {
                     navigate('/');
                 }
             });
+        } else if (error === 'social_login_failed') {
+            // Store the error in sessionStorage so the modal can pick it up
+            sessionStorage.setItem('social_login_error', 'Social login failed. Please try again or use email/password login.');
+            // Navigate to home page which will show the auth modal
+            navigate('/', { replace: true });
         } else {
             // No token found, redirect to home
             navigate('/');
         }
-    }, [location, navigate, actions]);
+    }, [location, navigate, actions, searchParams]);
 
     return (
         <div className="container text-center mt-5">
