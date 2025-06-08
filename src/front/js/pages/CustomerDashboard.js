@@ -116,12 +116,12 @@ const CustomerDashboard = () => {
                 <p>Please log in to view your dashboard.</p>
             </div>
 
-            <CustomerAuthModal
+            {/* <CustomerAuthModal
                 show={showAuthModal}
                 onHide={() => setShowAuthModal(false)}
                 initialTab="login"
                 onSuccess={handleAuthSuccess}
-            />
+            /> */}
         </>
     );
 };
