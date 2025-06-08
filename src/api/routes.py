@@ -1922,7 +1922,8 @@ def authorize(provider):
             return jsonify({"msg": "Email not provided by social provider"}), 400
 
         # Get the user type from session
-        user_type = session.pop('social_login_user_type', 'customer')
+        user_type = session.get('social_login_user_type', 'customer')
+        original_path = session.get('original_path', '')
         
         # Check if user exists
         if user_type == 'customer':
@@ -1984,6 +1985,10 @@ def authorize(provider):
         frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
         # Get the user type from session and include it in redirect
         user_type = session.get('social_login_user_type', 'customer')
-        # Get the original path from the session or default to home
         original_path = session.get('original_path', '')
+        
+        # Store the error and user type in the session for the frontend to handle
+        session['social_login_error'] = str(e)
+        session['social_login_user_type'] = user_type
+        
         return redirect(f"{frontend_url}{original_path}?error=social_login_failed&user_type={user_type}")
