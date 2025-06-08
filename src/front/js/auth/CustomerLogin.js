@@ -44,7 +44,7 @@ export const CustomerLogin = ({ onSuccess, switchToSignUp, onForgotPs }) => {
                     <div className="mb-3">
                         <input
                             type="email"
-                            className={`form-control bg-dark text-light ${invalidItems.includes("email") ? 'is-valid' : ''}`}
+                            className={`form-control bg-dark text-light ${invalidItems.includes("email") ? 'is-invalid' : ''}`}
                             style={{
                                 border: invalidItems.includes("email") ? '1px solid red' : '1px solid #414549',
                                 padding: '12px'
@@ -55,10 +55,10 @@ export const CustomerLogin = ({ onSuccess, switchToSignUp, onForgotPs }) => {
                             required
                         />
                         {invalidItems.includes("email") && (
-                            <p className="invalid-feedback">Invalid email format</p>
+                            <div className="invalid-feedback">Invalid email format</div>
                         )}
                     </div>
-                    <div>
+                    <div className="mb-3">
                         <input
                             type="password"
                             className={`form-control bg-dark text-light ${invalidItems.includes("password") ? 'is-invalid' : ''}`}
@@ -69,47 +69,45 @@ export const CustomerLogin = ({ onSuccess, switchToSignUp, onForgotPs }) => {
                             placeholder="Password"
                             value={password}
                             onChange={(event) => setPassword(event.target.value)}
-                            onKeyPress={(e) => e.key === "Enter" && handleLogin()}
                             required
                         />
                         {invalidItems.includes("password") && (
                             <div className="invalid-feedback">Password must be 5-20 characters</div>
                         )}
-                        {apiError && <p className="text-danger mt-2">{apiError}</p>}
-                        <div>
-                            <span
-                                onClick={() => onForgotPs()}
-                                className="text-secondary auth-link small-font"
-                                style={{ cursor: 'pointer' }}
-                            >
-                                Forgot Password?
-                            </span>
-                        </div>
-                        <div className="text-center mt-3 mb-4">
-                            <button
-                                type="submit"
-                                className="btn btn-secondary w-100 py-2"
-                                style={{
-                                    backgroundColor: '#6c757d',
-                                    border: 'none',
-                                    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.2)',
-                                    transition: 'all 0.3s ease',
-                                }}
-                            >
-                                Login
-                            </button>
-                        </div>
-                        <div className="text-center text-secondary small-font">
-                            New to our platform?
-                            <span
-                                onClick={() => { switchToSignUp() }}
-                                className="ms-1 text-secondary auth-link"
-                            >
-                                Create an account
-                            </span>
-                        </div>
-                        <SocialLogins userType="customer" />
                     </div>
+                    {apiError && <p className="text-danger mb-3">{apiError}</p>}
+                    <div className="mb-3">
+                        <span
+                            onClick={onForgotPs}
+                            className="text-secondary auth-link small-font"
+                            style={{ cursor: 'pointer' }}
+                        >
+                            Forgot Password?
+                        </span>
+                    </div>
+                    <button
+                        type="submit"
+                        className="btn btn-secondary w-100 py-2 mb-3"
+                        style={{
+                            backgroundColor: '#6c757d',
+                            border: 'none',
+                            boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.2)',
+                            transition: 'all 0.3s ease',
+                        }}
+                    >
+                        Login
+                    </button>
+                    <div className="text-center text-secondary small-font mb-3">
+                        New to our platform?{' '}
+                        <span
+                            onClick={switchToSignUp}
+                            className="text-secondary auth-link"
+                            style={{ cursor: 'pointer' }}
+                        >
+                            Create an account
+                        </span>
+                    </div>
+                    <SocialLogins userType="customer" />
                 </div>
             </div>
         </form>

@@ -6,10 +6,8 @@ import { CustomerSignup } from './CustomerSignup.js';
 import { ForgotPsModal } from './ForgotPsModal.js';
 import { VerifyCodeModal } from './VerifyCodeModal.js';
 import "../../styles/auth.css";
-import { useNavigate } from 'react-router-dom';
 
-
-export const CustomerAuthModal = ({ initialTab, show, onHide }) => {
+export const CustomerAuthModal = ({ initialTab, show, onHide, onSuccess }) => {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [showForgotPs, setShowForgotPs] = useState(false);
   const [showVerifyCode, setShowVerifyCode] = useState(false);
@@ -17,7 +15,6 @@ export const CustomerAuthModal = ({ initialTab, show, onHide }) => {
   const [socialLoginError, setSocialLoginError] = useState("");
   const modalRef = useRef(null);
   const bsModalRef = useRef(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
     // Check for social login error in sessionStorage
@@ -50,24 +47,12 @@ export const CustomerAuthModal = ({ initialTab, show, onHide }) => {
   }, [onHide]);
 
   useEffect(() => {
-    if (bsModalRef.current) {
-      if (show) {
-        setActiveTab(initialTab);
-        bsModalRef.current.show();
-      } else {
-        bsModalRef.current.hide();
-      }
+    if (show && bsModalRef.current) {
+      bsModalRef.current.show();
+    } else if (!show && bsModalRef.current) {
+      bsModalRef.current.hide();
     }
-  }, [show, initialTab]);
-
-  useEffect(() => {
-    const modal = bsModalRef.current;
-    if (modal && modal._config) {
-      const isSubModalActive = showForgotPs || showVerifyCode;
-      modal._config.keyboard = !isSubModalActive;
-      modal._config.backdrop = isSubModalActive ? 'static' : true;
-    }
-  }, [showForgotPs, showVerifyCode]);
+  }, [show]);
 
   const handleClose = () => {
     if (bsModalRef.current) {
@@ -75,75 +60,44 @@ export const CustomerAuthModal = ({ initialTab, show, onHide }) => {
     }
   };
 
-  const handleSignupSuccess = (email) => {
-    setEmailForVerification(email);
-    setShowVerifyCode(true);
-  };
-
-  const handleForgotPsReturn = () => {
-    setShowForgotPs(false);
-    setActiveTab('login');
-  };
-
   const handleSwitchLogin = () => {
-    setShowVerifyCode(false);
     setActiveTab('login');
+    setShowVerifyCode(false);
   };
 
   const handleSwitchSignUp = () => {
     setActiveTab('signup');
   };
 
-  const handleTabChange = (tab) => {
-    console.log('Changing tab to:', tab);
-    setActiveTab(tab);
+  const handleForgotPsReturn = () => {
+    setShowForgotPs(false);
+  };
+
+  const handleSignupSuccess = (email) => {
+    setEmailForVerification(email);
+    setShowVerifyCode(true);
+  };
+
+  const handleLoginSuccess = () => {
+    handleClose();
+    if (onSuccess) {
+      onSuccess();
+    }
   };
 
   return (
-    <div
-      className="modal fade auth"
-      id="customerAuthModal"
-      tabIndex="-1"
-      aria-hidden="true"
-      ref={modalRef}
-    >
-      {/* <div className="modal-dialog modal-dialog-centered"> */}
-      <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-        <div
-          className="modal-content bg-dark"
-          style={{
-            boxShadow: '0 0 30px rgba(0, 0, 0, 0.7)',
-          }}
-        >
+    <div className="modal fade" ref={modalRef} tabIndex="-1">
+      <div className="modal-dialog modal-dialog-centered">
+        <div className="modal-content bg-dark">
           {!showForgotPs && !showVerifyCode ? (
             <>
-              <div className="modal-header border-0 p-0">
-                <div className="d-flex w-100 position-relative">
-                  <button
-                    className={`flex-fill border-0 auth-tab login-tab ${activeTab === 'login'
-                      ? 'active text-white'
-                      : 'text-secondary'
-                      }`}
-                    onClick={() => handleTabChange('login')}
-                  >
-                    Login
-                  </button>
-                  <div className="vr" style={{ backgroundColor: '#6c757d', marginTop: '15px', marginBottom: '15px' }}></div>
-                  <button
-                    className={`flex-fill border-0 auth-tab signup-tab ${activeTab === 'signup'
-                      ? 'active text-white'
-                      : 'text-secondary'
-                      }`}
-                    onClick={() => handleTabChange('signup')}
-                  >
-                    Sign Up
-                  </button>
-                </div>
+              <div className="modal-header border-0">
                 <button
                   type="button"
-                  className="btn-close btn-close-white position-absolute top-0 end-0 m-1"
+                  className="btn-close btn-close-white"
                   onClick={handleClose}
-                />
+                  aria-label="Close"
+                ></button>
               </div>
               <div className="modal-body p-4">
                 {socialLoginError && (
@@ -153,16 +107,15 @@ export const CustomerAuthModal = ({ initialTab, show, onHide }) => {
                 )}
                 {activeTab === 'login' ? (
                   <CustomerLogin
-                    onSuccess={() => {
-                      console.log('Login successful, rerouting to the customer dashboard page');
-                      handleClose();
-                      navigate("/customer-dashboard");
-                    }}
+                    onSuccess={handleLoginSuccess}
                     switchToSignUp={handleSwitchSignUp}
                     onForgotPs={() => setShowForgotPs(true)}
                   />
                 ) : (
-                  <CustomerSignup switchToLogin={handleSwitchLogin} onSignupSuccess={handleSignupSuccess} />
+                  <CustomerSignup
+                    switchToLogin={handleSwitchLogin}
+                    onSignupSuccess={handleSignupSuccess}
+                  />
                 )}
               </div>
             </>
