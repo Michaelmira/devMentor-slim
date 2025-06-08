@@ -1872,22 +1872,18 @@ def reschedule_booking():
     return jsonify({"success": True, "message": "Booking rescheduled successfully"}), 200
 
 @api.route('/login/<provider>')
-def social_login(provider):
+def oauth_login(provider):
     if provider not in ['google', 'github']:
         return jsonify({"msg": "Invalid social login provider"}), 404
-    
-    user_type = request.args.get('user_type', 'customer')
-    if user_type not in ['customer', 'mentor']:
-        return jsonify({"msg": "Invalid user type"}), 400
-    
-    # Store user_type and return path in session for use in callback
-    session['social_login_user_type'] = user_type
-    session['original_path'] = request.args.get('return_path', '')
-    
+
     client = oauth.create_client(provider)
     if not client:
         return jsonify({"msg": "Social login provider not configured"}), 500
-    
+
+    # Store user type and return path in session
+    session['social_login_user_type'] = request.args.get('user_type', 'customer')
+    session['return_path'] = request.args.get('return_path', '/')
+
     redirect_uri = url_for('api.authorize', provider=provider, _external=True)
     return client.authorize_redirect(redirect_uri)
 

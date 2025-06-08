@@ -6,6 +6,7 @@ import { useParams } from 'react-router-dom';
 import { CustomerLogin } from '../auth/CustomerLogin';
 import { CustomerSignup } from '../auth/CustomerSignup';
 import { VerifyCodeModal } from '../auth/VerifyCodeModal';
+import { SocialLogins } from '../auth/SocialLogins';
 
 import { PaymentForm } from './PaymentForm';
 
@@ -253,7 +254,7 @@ export const CalendlyAvailability = ({ mentorId, mentor, onPaymentSuccess, onCan
               onClose={handleCancel}
               switchToLogin={handleVerificationComplete}
             />
-            
+
             <div className="text-center mt-3">
               <button
                 className="btn btn-secondary"
@@ -295,16 +296,38 @@ export const CalendlyAvailability = ({ mentorId, mentor, onPaymentSuccess, onCan
             {/* Auth form */}
             <div className="auth-form-container">
               {activeAuthTab === 'login' ? (
-                <CustomerLogin
-                  onSuccess={handleLoginSuccess}
-                  switchToSignUp={() => handleSwitchTab('signup')}
-                  onForgotPs={() => { }}
-                />
+                <>
+                  <CustomerLogin
+                    onSuccess={handleLoginSuccess}
+                    switchToSignUp={() => handleSwitchTab('signup')}
+                    onForgotPs={() => { }}
+                  />
+                  <div className="d-flex align-items-center my-3">
+                    <hr className="flex-grow-1" />
+                    <span className="px-2 text-muted">or</span>
+                    <hr className="flex-grow-1" />
+                  </div>
+                  <SocialLogins
+                    userType="customer"
+                    returnPath={window.location.pathname + window.location.search}
+                  />
+                </>
               ) : (
-                <CustomerSignup
-                  switchToLogin={() => handleSwitchTab('login')}
-                  onSignupSuccess={handleSignupSuccess}
-                />
+                <>
+                  <CustomerSignup
+                    switchToLogin={() => handleSwitchTab('login')}
+                    onSignupSuccess={handleSignupSuccess}
+                  />
+                  <div className="d-flex align-items-center my-3">
+                    <hr className="flex-grow-1" />
+                    <span className="px-2 text-muted">or</span>
+                    <hr className="flex-grow-1" />
+                  </div>
+                  <SocialLogins
+                    userType="customer"
+                    returnPath={window.location.pathname + window.location.search}
+                  />
+                </>
               )}
             </div>
 

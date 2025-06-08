@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
-export const SocialLogins = ({ userType = 'customer' }) => {
+export const SocialLogins = ({ userType = 'customer', returnPath = null }) => {
     const [error, setError] = useState('');
     const location = useLocation();
 
     const handleSocialLogin = (provider) => {
         try {
-            // Store the current path in sessionStorage
-            sessionStorage.setItem('social_login_return_path', location.pathname);
-            // Add userType to the URL to indicate whether this is a mentor or customer login
-            window.location.href = `${process.env.BACKEND_URL}/api/login/${provider}?user_type=${userType}&return_path=${encodeURIComponent(location.pathname)}`;
+            // Use provided returnPath or current path
+            const finalReturnPath = returnPath || location.pathname;
+
+            // Store the return path in sessionStorage
+            sessionStorage.setItem('social_login_return_path', finalReturnPath);
+
+            // Add userType and return path to the URL
+            window.location.href = `${process.env.BACKEND_URL}/api/login/${provider}?user_type=${userType}&return_path=${encodeURIComponent(finalReturnPath)}`;
         } catch (err) {
             setError('Failed to initiate social login. Please try again.');
             console.error('Social login error:', err);
