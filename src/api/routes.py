@@ -1925,14 +1925,23 @@ def authorize(provider):
         user_type = session.get('social_login_user_type', 'customer')
         original_path = session.get('original_path', '')
         
-        # Check if user exists
-        if user_type == 'customer':
-            user = Customer.query.filter_by(email=email).first()
-        else:
-            user = Mentor.query.filter_by(email=email).first()
+        # Check if user exists in either table
+        existing_customer = Customer.query.filter_by(email=email).first()
+        existing_mentor = Mentor.query.filter_by(email=email).first()
 
-        # If user doesn't exist, create a new one
-        if not user:
+        # Handle existing users
+        if existing_customer and user_type == 'customer':
+            user = existing_customer
+        elif existing_mentor and user_type == 'mentor':
+            user = existing_mentor
+        elif existing_customer and user_type == 'mentor':
+            # User exists as customer but trying to sign up as mentor
+            return redirect(f"{os.getenv('FRONTEND_URL')}{original_path}?error=social_login_failed&user_type={user_type}&message=email_exists_as_customer")
+        elif existing_mentor and user_type == 'customer':
+            # User exists as mentor but trying to sign up as customer
+            return redirect(f"{os.getenv('FRONTEND_URL')}{original_path}?error=social_login_failed&user_type={user_type}&message=email_exists_as_mentor")
+        else:
+            # Create new user based on type
             # Generate a random password
             random_password = generate_password_hash(secrets.token_urlsafe(16))
             
@@ -1969,7 +1978,7 @@ def authorize(provider):
             db.session.add(user)
             db.session.commit()
 
-        # Create access token
+        # Create access token with correct role
         access_token = create_access_token(
             identity=user.id,
             additional_claims={"role": user_type}
@@ -1983,7 +1992,6 @@ def authorize(provider):
     except Exception as e:
         current_app.logger.error(f"Social login error: {str(e)}")
         frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
-        # Get the user type from session and include it in redirect
         user_type = session.get('social_login_user_type', 'customer')
         original_path = session.get('original_path', '')
         

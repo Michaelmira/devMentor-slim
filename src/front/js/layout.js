@@ -31,10 +31,20 @@ const MainLayout = () => {
     useEffect(() => {
         const error = searchParams.get('error');
         const userType = searchParams.get('user_type');
+        const message = searchParams.get('message');
 
         if (error === 'social_login_failed') {
+            let errorMessage = 'Social login failed. Please try again or use email/password login.';
+
+            // Handle specific error messages
+            if (message === 'email_exists_as_customer') {
+                errorMessage = 'This email is already registered as a customer. Please use the customer login instead.';
+            } else if (message === 'email_exists_as_mentor') {
+                errorMessage = 'This email is already registered as a mentor. Please use the mentor login instead.';
+            }
+
             // Store the error in sessionStorage
-            sessionStorage.setItem('social_login_error', 'Social login failed. Please try again or use email/password login.');
+            sessionStorage.setItem('social_login_error', errorMessage);
 
             // Show the appropriate modal
             if (userType === 'mentor') {
@@ -109,7 +119,7 @@ const Layout = () => {
         // Cleanup function
         return () => clearInterval(interval);
     }, [store.token]);
-    
+
 
     return (
         <div>
