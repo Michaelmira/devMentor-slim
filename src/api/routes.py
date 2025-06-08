@@ -1871,9 +1871,9 @@ def reschedule_booking():
 
     return jsonify({"success": True, "message": "Booking rescheduled successfully"}), 200
 
-@api.route('/login/<n>')
-def social_login(name):
-    if name not in ['google', 'github']:
+@api.route('/login/<provider>')
+def social_login(provider):
+    if provider not in ['google', 'github']:
         return jsonify({"msg": "Invalid social login provider"}), 404
     
     user_type = request.args.get('user_type', 'customer')
@@ -1884,19 +1884,19 @@ def social_login(name):
     session['social_login_user_type'] = user_type
     session['original_path'] = request.args.get('return_path', '')
     
-    client = oauth.create_client(name)
+    client = oauth.create_client(provider)
     if not client:
         return jsonify({"msg": "Social login provider not configured"}), 500
     
-    redirect_uri = url_for('api.authorize', name=name, _external=True)
+    redirect_uri = url_for('api.authorize', provider=provider, _external=True)
     return client.authorize_redirect(redirect_uri)
 
-@api.route('/authorize/<name>')
-def authorize(name):
-    if name not in ['google', 'github']:
+@api.route('/authorize/<provider>')
+def authorize(provider):
+    if provider not in ['google', 'github']:
         return jsonify({"msg": "Invalid social login provider"}), 404
     
-    client = oauth.create_client(name)
+    client = oauth.create_client(provider)
     if not client:
         return jsonify({"msg": "Social login provider not configured"}), 500
     
@@ -1904,11 +1904,11 @@ def authorize(name):
         token = client.authorize_access_token()
         
         # Get user info based on provider
-        if name == 'google':
+        if provider == 'google':
             user_info = token.get('userinfo')
             if not user_info:
                 user_info = client.userinfo(token=token)
-        elif name == 'github':
+        elif provider == 'github':
             user_info = client.get('user', token=token).json()
             # For GitHub, we need to make an additional request to get the email
             if not user_info.get('email'):
