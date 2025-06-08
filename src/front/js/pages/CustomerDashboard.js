@@ -14,37 +14,28 @@ const CustomerDashboard = () => {
     useEffect(() => {
         const verifyUser = async () => {
             try {
-                // Check if we already have valid user data in the store
-                if (store.currentUserData?.role === 'customer' && store.token) {
-                    const customerBookings = await actions.getCustomerBookings();
-                    setBookings(customerBookings || []);
-                    setLoading(false);
-                    return;
-                }
-
-                // Get the token from sessionStorage
-                const token = sessionStorage.getItem("token");
+                // First check if we have a token
+                const token = store.token || sessionStorage.getItem("token");
                 if (!token) {
-                    console.log("No token found, showing auth modal");
                     setShowAuthModal(true);
                     setLoading(false);
                     return;
                 }
 
-                // Verify the user
+                // Get or refresh user data
                 const userData = await actions.getCurrentUser();
                 console.log("User data:", userData);
 
                 if (!userData || userData.role !== 'customer') {
-                    console.log("User is not a customer, showing auth modal");
                     setShowAuthModal(true);
                     setLoading(false);
                     return;
                 }
 
-                // Fetch customer bookings
+                // If we get here, we have valid user data, fetch bookings
                 const customerBookings = await actions.getCustomerBookings();
                 setBookings(customerBookings || []);
+                setShowAuthModal(false);
             } catch (err) {
                 console.error("Error verifying user:", err);
                 setShowAuthModal(true);
@@ -54,26 +45,24 @@ const CustomerDashboard = () => {
         };
 
         verifyUser();
-    }, [store.currentUserData, store.token]); // Add dependencies to prevent unnecessary reruns
+    }, []); // Run only on mount
 
     const handleAuthSuccess = () => {
         setShowAuthModal(false);
-        // No need to reload the page, just verify the user again
+        setLoading(true);
+        // Refresh user data and bookings
         actions.getCurrentUser().then(() => {
             actions.getCustomerBookings().then(customerBookings => {
                 setBookings(customerBookings || []);
+                setLoading(false);
             });
         });
     };
 
     // Helper function to get the correct date/time to display
     const getBookingDateTime = (booking) => {
-        // Use calendly_event_start_time if available (actual meeting time)
-        // Otherwise fall back to scheduled_at (booking creation time)
         const dateToUse = booking.calendly_event_start_time || booking.scheduled_at;
-
         if (!dateToUse) return 'Not scheduled';
-
         return new Date(dateToUse).toLocaleString();
     };
 
@@ -81,8 +70,8 @@ const CustomerDashboard = () => {
         return <div className="container text-center"><h2>Loading...</h2></div>;
     }
 
-    // If we have valid user data, don't show the modal
-    if (store.currentUserData?.role === 'customer' && store.token) {
+    // Show dashboard if we have valid user data
+    if (store.currentUserData?.role === 'customer') {
         return (
             <div className="container">
                 <h1>Customer Dashboard</h1>
@@ -119,7 +108,7 @@ const CustomerDashboard = () => {
         );
     }
 
-    // Show both the dashboard (if any data) and the auth modal
+    // Show login prompt and auth modal if not authenticated
     return (
         <>
             <div className="container">
