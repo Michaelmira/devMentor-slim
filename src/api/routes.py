@@ -1970,8 +1970,8 @@ def authorize(provider):
                     city="Please update your city",  # Placeholder values
                     what_state="Please update your state",
                     country="Please update your country",
-                    bio="Welcome to devMentor! Please update your bio to help potential clients learn more about you.",
-                    hourly_rate=0,  # Default hourly rate
+                    about_me="Welcome to devMentor! Please update your profile to help potential clients learn more about you.",
+                    price=None,  # Default price
                     is_active=True  # Default to active
                 )
             
