@@ -14,9 +14,13 @@ const CustomerDashboard = () => {
     useEffect(() => {
         const verifyUser = async () => {
             try {
-                // Check for social login token
-                const hasSocialToken = actions.handleSocialLoginToken();
-                console.log("Social token check:", hasSocialToken);
+                // Check if we already have valid user data in the store
+                if (store.currentUserData?.role === 'customer' && store.token) {
+                    const customerBookings = await actions.getCustomerBookings();
+                    setBookings(customerBookings || []);
+                    setLoading(false);
+                    return;
+                }
 
                 // Get the token from sessionStorage
                 const token = sessionStorage.getItem("token");
@@ -50,11 +54,16 @@ const CustomerDashboard = () => {
         };
 
         verifyUser();
-    }, []);
+    }, [store.currentUserData, store.token]); // Add dependencies to prevent unnecessary reruns
 
     const handleAuthSuccess = () => {
         setShowAuthModal(false);
-        window.location.reload(); // Refresh the page to get the latest data
+        // No need to reload the page, just verify the user again
+        actions.getCurrentUser().then(() => {
+            actions.getCustomerBookings().then(customerBookings => {
+                setBookings(customerBookings || []);
+            });
+        });
     };
 
     // Helper function to get the correct date/time to display
@@ -72,8 +81,9 @@ const CustomerDashboard = () => {
         return <div className="container text-center"><h2>Loading...</h2></div>;
     }
 
-    return (
-        <>
+    // If we have valid user data, don't show the modal
+    if (store.currentUserData?.role === 'customer' && store.token) {
+        return (
             <div className="container">
                 <h1>Customer Dashboard</h1>
                 <h2 className="mb-4">Your Booked Sessions</h2>
@@ -105,6 +115,16 @@ const CustomerDashboard = () => {
                         <p>You have no upcoming bookings.</p>
                     </div>
                 )}
+            </div>
+        );
+    }
+
+    // Show both the dashboard (if any data) and the auth modal
+    return (
+        <>
+            <div className="container">
+                <h1>Customer Dashboard</h1>
+                <p>Please log in to view your dashboard.</p>
             </div>
 
             <CustomerAuthModal
