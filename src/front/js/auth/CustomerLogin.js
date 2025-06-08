@@ -110,7 +110,7 @@ export const CustomerLogin = ({ onSuccess, switchToSignUp, onForgotPs }) => {
                             Create an account
                         </span>
                     </div>
-                    <SocialLogins userType="customer" />
+                    <SocialLogins userType="customer" returnPath="/customer-dashboard" />
                 </div>
             </div>
         </form>

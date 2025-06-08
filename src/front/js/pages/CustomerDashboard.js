@@ -1,7 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { Context } from '../store/appContext';
 import { useNavigate } from "react-router-dom";
-import { CustomerAuthModal } from "../auth/CustomerAuthModal.js";
 
 const CustomerDashboard = () => {
     const { store, actions } = useContext(Context);
@@ -13,10 +12,14 @@ const CustomerDashboard = () => {
     useEffect(() => {
         const verifyUser = async () => {
             try {
-                // First check if we have a token
+                // Check for social login token first
+                const hasSocialToken = actions.handleSocialLoginToken();
+
+                // Get token from either store or sessionStorage
                 const token = store.token || sessionStorage.getItem("token");
                 if (!token) {
-                    navigate("/login");
+                    console.log("No token found, redirecting to home");
+                    navigate("/");
                     setLoading(false);
                     return;
                 }
@@ -26,7 +29,8 @@ const CustomerDashboard = () => {
                 console.log("User data:", userData);
 
                 if (!userData || userData.role !== 'customer') {
-                    navigate("/login");
+                    console.log("Invalid user data or not a customer, redirecting to home");
+                    navigate("/");
                     setLoading(false);
                     return;
                 }
@@ -36,7 +40,7 @@ const CustomerDashboard = () => {
                 setBookings(customerBookings || []);
             } catch (err) {
                 console.error("Error verifying user:", err);
-                navigate("/login");
+                navigate("/");
             } finally {
                 setLoading(false);
             }
@@ -56,7 +60,6 @@ const CustomerDashboard = () => {
         return <div className="container text-center"><h2>Loading...</h2></div>;
     }
 
-    // Only render the dashboard since auth is handled by navigation
     return (
         <div className="container">
             <h1>Customer Dashboard</h1>
