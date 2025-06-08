@@ -4,6 +4,7 @@ import React, { useContext, useState } from "react";
 import { Context } from "../store/appContext";
 import { ValidateEmail, ValidatePassword } from "../component/Validators"; // Ensure path is correct
 import { SocialLogins } from "./SocialLogins";
+import { useNavigate } from "react-router-dom";
 
 
 export const CustomerLogin = ({ onSuccess, switchToSignUp, onForgotPs }) => {
@@ -12,6 +13,7 @@ export const CustomerLogin = ({ onSuccess, switchToSignUp, onForgotPs }) => {
     const [password, setPassword] = useState("");
     const [invalidItems, setInvalidItems] = useState([]);
     const [apiError, setApiError] = useState(""); // To hold API error messages
+    const navigate = useNavigate();
 
     const handleLogin = async () => {
         // Reset errors
@@ -26,6 +28,7 @@ export const CustomerLogin = ({ onSuccess, switchToSignUp, onForgotPs }) => {
             const result = await actions.logInCustomer({ email, password });
             if (result.success) {
                 if (onSuccess) onSuccess();
+                navigate("/customer-dashboard");
             } else {
                 // Set the error message from the API response
                 setApiError(result.message || "Email and/or password is incorrect. Please try again.");
