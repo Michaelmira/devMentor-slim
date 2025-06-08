@@ -232,7 +232,7 @@ export const CustomerSignup = ({ switchToLogin, onSignupSuccess }) => {
                             Login
                         </span>
                     </div>
-                    <SocialLogins />
+                    <SocialLogins userType="customer" />
                 </div>
             </div>
         </form>

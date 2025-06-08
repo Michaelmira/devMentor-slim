@@ -303,7 +303,7 @@ export const MentorSignup = ({ switchToLogin, onSignupSuccess }) => {
                             Login
                         </span>
                     </div>
-                    <SocialLogins />
+                    <SocialLogins userType="mentor" />
                 </div>
             </div>
         </form>
