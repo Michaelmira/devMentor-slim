@@ -5,6 +5,7 @@ import { CustomerLogin } from './CustomerLogin.js';
 import { CustomerSignup } from './CustomerSignup.js';
 import { ForgotPsModal } from './ForgotPsModal.js';
 import { VerifyCodeModal } from './VerifyCodeModal.js';
+import { useNavigate } from "react-router-dom";
 import "../../styles/auth.css";
 
 export const CustomerAuthModal = ({ initialTab, show, onHide, onSuccess }) => {
@@ -15,6 +16,7 @@ export const CustomerAuthModal = ({ initialTab, show, onHide, onSuccess }) => {
   const [socialLoginError, setSocialLoginError] = useState("");
   const modalRef = useRef(null);
   const bsModalRef = useRef(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Check for social login error in sessionStorage
@@ -83,6 +85,8 @@ export const CustomerAuthModal = ({ initialTab, show, onHide, onSuccess }) => {
     if (onSuccess) {
       onSuccess();
     }
+    // Navigate to customer dashboard after successful login
+    navigate("/customer-dashboard");
   };
 
   return (
