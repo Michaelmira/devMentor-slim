@@ -39,6 +39,11 @@ oauth.register(
     }
 )
 
+# Debug print for OAuth configuration
+print("\nOAuth Configuration:")
+print(f"GITHUB_CLIENT_ID: {os.getenv('GITHUB_CLIENT_ID')}")
+print(f"BACKEND_URL: {os.getenv('BACKEND_URL')}")
+
 oauth.register(
     name='github',
     client_id=os.getenv('GITHUB_CLIENT_ID'),
@@ -53,6 +58,10 @@ oauth.register(
         'token_endpoint_auth_method': 'client_secret_post'
     }
 )
+
+# Ensure the redirect URI is properly set for GitHub OAuth
+github_redirect_uri = f"{os.getenv('BACKEND_URL')}/api/authorize/github"
+print(f"GitHub Redirect URI: {github_redirect_uri}")
 
 # Apply ProxyFix for deployments behind a reverse proxy
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
