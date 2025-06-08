@@ -48,7 +48,10 @@ oauth.register(
     authorize_url='https://github.com/login/oauth/authorize',
     authorize_params=None,
     api_base_url='https://api.github.com/',
-    client_kwargs={'scope': 'user:email'}
+    client_kwargs={
+        'scope': 'user:email',
+        'token_endpoint_auth_method': 'client_secret_post'
+    }
 )
 
 # Apply ProxyFix for deployments behind a reverse proxy
