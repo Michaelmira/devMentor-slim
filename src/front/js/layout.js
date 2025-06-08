@@ -101,25 +101,25 @@ const Layout = () => {
 
     const { store, actions } = useContext(Context);
 
-    //useEffect to handle token exp. instances
     useEffect(() => {
-        if (store.token) {
+        // Only check user data if we have a token but no current user data
+        if (store.token && !store.currentUserData) {
             actions.getCurrentUser();
         }
 
+        // Set up a less frequent interval for token validation
         const interval = setInterval(() => {
-            if (store.token) {
-                actions.getCurrentUser();
-            } else {
-                // Handle no token case
-                console.log('User not authenticated');
+            const token = store.token;
+            if (token) {
+                // Only call getCurrentUser if we have a token but no current user data
+                if (!store.currentUserData) {
+                    actions.getCurrentUser();
+                }
             }
-        }, 60000);
+        }, 300000); // Check every 5 minutes instead of every minute
 
-        // Cleanup function
         return () => clearInterval(interval);
-    }, [store.token]);
-
+    }, [store.token, store.currentUserData]); // Add currentUserData as dependency
 
     return (
         <div>

@@ -25,12 +25,20 @@ const getState = ({ getStore, getActions, setStore }) => {
 
             getCurrentUser: async () => {
                 try {
-                    const token = getStore().token || sessionStorage.getItem('token');
+                    const store = getStore();
+                    const token = store.token || sessionStorage.getItem('token');
                     if (!token) {
                         console.error("No token found in sessionStorage");
                         getActions().logOut();
                         return false;
                     }
+
+                    // Check if we already have current user data and it matches the token
+                    const currentData = store.currentUserData;
+                    if (currentData && store.token === token) {
+                        return currentData;
+                    }
+
                     const response = await fetch(`${process.env.BACKEND_URL}/api/current/user`, {
                         method: "GET",
                         headers: {
@@ -38,42 +46,47 @@ const getState = ({ getStore, getActions, setStore }) => {
                             "Authorization": "Bearer " + token
                         }
                     });
+
                     if (response.ok) {
                         const data = await response.json();
                         console.log("userdata from token", data);
-                        if (data.role === "mentor") {
-                            setStore({
-                                token: token,
-                                isMentorLoggedIn: true,
-                                isCustomerLoggedIn: false,
-                                currentUserData: data,
-                                mentorId: data.user_data.id,
-                                customerId: null
-                            });
-                            sessionStorage.setItem("token", token);
-                            sessionStorage.setItem("isMentorLoggedIn", "true");
-                            sessionStorage.setItem("isCustomerLoggedIn", "false");
-                            sessionStorage.setItem("mentorId", data.user_data.id);
-                            sessionStorage.setItem("currentUserData", JSON.stringify(data));
-                            return data;
+
+                        // Only update store if data has changed
+                        const shouldUpdate = JSON.stringify(data) !== JSON.stringify(store.currentUserData);
+
+                        if (shouldUpdate) {
+                            if (data.role === "mentor") {
+                                setStore({
+                                    token: token,
+                                    isMentorLoggedIn: true,
+                                    isCustomerLoggedIn: false,
+                                    currentUserData: data,
+                                    mentorId: data.user_data.id,
+                                    customerId: null
+                                });
+                                sessionStorage.setItem("token", token);
+                                sessionStorage.setItem("isMentorLoggedIn", "true");
+                                sessionStorage.setItem("isCustomerLoggedIn", "false");
+                                sessionStorage.setItem("mentorId", data.user_data.id);
+                                sessionStorage.setItem("currentUserData", JSON.stringify(data));
+                            }
+                            if (data.role === "customer") {
+                                setStore({
+                                    token: token,
+                                    isMentorLoggedIn: false,
+                                    isCustomerLoggedIn: true,
+                                    currentUserData: data,
+                                    customerId: data.user_data.id,
+                                    mentorId: null
+                                });
+                                sessionStorage.setItem("token", token);
+                                sessionStorage.setItem("isMentorLoggedIn", "false");
+                                sessionStorage.setItem("isCustomerLoggedIn", "true");
+                                sessionStorage.setItem("customerId", data.user_data.id);
+                                sessionStorage.setItem("currentUserData", JSON.stringify(data));
+                            }
                         }
-                        if (data.role === "customer") {
-                            setStore({
-                                token: token,
-                                isMentorLoggedIn: false,
-                                isCustomerLoggedIn: true,
-                                currentUserData: data,
-                                customerId: data.user_data.id,
-                                mentorId: null
-                            });
-                            sessionStorage.setItem("token", token);
-                            sessionStorage.setItem("isMentorLoggedIn", "false");
-                            sessionStorage.setItem("isCustomerLoggedIn", "true");
-                            sessionStorage.setItem("customerId", data.user_data.id);
-                            sessionStorage.setItem("currentUserData", JSON.stringify(data));
-                            return data;
-                        }
-                        return false;
+                        return data;
                     } else {
                         console.error("get current user status:", response.status);
                         getActions().logOut();
