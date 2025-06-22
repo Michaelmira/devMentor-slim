@@ -1,0 +1,149 @@
+/* BookingCalendarWidget.css */
+
+.booking-calendar {
+    padding: 20px;
+}
+
+.calendar-grid {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.calendar-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+}
+
+.calendar-day {
+    aspect-ratio: 1;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    transition: all 0.2s ease;
+    position: relative;
+    min-height: 60px;
+}
+
+.calendar-day:hover {
+    border-color: #007bff;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.1);
+}
+
+.calendar-day.has-slots {
+    cursor: pointer;
+    background: #e7f3ff;
+    border-color: #007bff;
+}
+
+.calendar-day.selected {
+    background: #007bff;
+    color: white;
+    border-color: #0056b3;
+}
+
+.calendar-day.selected .slot-count {
+    color: white;
+    opacity: 0.9;
+}
+
+.calendar-day.unavailable {
+    background: #ffebee;
+    border-color: #ef5350;
+    color: #c62828;
+    cursor: not-allowed;
+}
+
+.calendar-day.unavailable:hover {
+    border-color: #ef5350;
+    transform: none;
+    box-shadow: none;
+}
+
+.day-number {
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.slot-count {
+    font-size: 11px;
+    color: #007bff;
+    position: absolute;
+    bottom: 4px;
+}
+
+.unavailable-label {
+    font-size: 9px;
+    color: #c62828;
+    position: absolute;
+    bottom: 4px;
+}
+
+.time-slots {
+    margin-top: 30px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.time-slots button {
+    margin-bottom: 8px;
+    transition: all 0.2s ease;
+}
+
+.time-slots button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.2);
+}
+
+/* Legend styles */
+.calendar-legend {
+    padding: 10px;
+}
+
+.legend-dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 5px;
+}
+
+.legend-dot.available {
+    background: #e7f3ff;
+    border: 1px solid #007bff;
+}
+
+.legend-dot.unavailable {
+    background: #ffebee;
+    border: 1px solid #ef5350;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .calendar-days {
+        gap: 4px;
+    }
+    
+    .calendar-day {
+        min-height: 50px;
+    }
+    
+    .day-number {
+        font-size: 14px;
+    }
+    
+    .slot-count {
+        font-size: 10px;
+    }
+    
+    .unavailable-label {
+        font-size: 8px;
+    }
+}

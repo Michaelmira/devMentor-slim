@@ -3,11 +3,11 @@ This module takes care of starting the API Server, Loading the DB and Adding the
 """
 import os
 import logging
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, time as datetime_time 
 import stripe
 
 from flask import Flask, request, jsonify, url_for, Blueprint, current_app, redirect, session
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 import jwt
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -17,11 +17,12 @@ import cloudinary.uploader as uploader
 from cloudinary.uploader import destroy
 from cloudinary.api import delete_resources_by_tag
 
-from api.models import db, Mentor, Customer, MentorImage, PortfolioPhoto, Booking, BookingStatus
+from api.services.videosdk_service import VideoSDKService
+
+from api.models import db, Mentor, Customer, MentorImage, PortfolioPhoto, Booking, BookingStatus, MentorAvailability, CalendarSettings, MentorUnavailability
 from api.utils import generate_sitemap, APIException
 from api.decorators import mentor_required, customer_required
-from api.send_email import send_email
-
+from api.send_email import send_email, send_verification_email_code
 
 import pytz
 from enum import Enum as PyEnum
@@ -35,8 +36,24 @@ from google.oauth2.credentials import Credentials
 import requests # For making HTTP requests to Calendly
 import secrets # For generating secure state tokens for OAuth
 
-from .email_utils import send_booking_confirmation_email
 from datetime import datetime as dt
+from decimal import Decimal
+import time
+
+
+
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+FRONTEND_URL = os.getenv("FRONTEND_URL") or "http://localhost:3000"
+BACKEND_URL = os.getenv("BACKEND_URL") or "http://localhost:3001"
+
+# Stripe API Setup
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_CLIENT_ID = os.getenv("STRIPE_CLIENT_ID")
+STRIPE_CALLBACK_URL = f"{os.getenv('BACKEND_URL')}/api/stripe/callback"
+stripe.api_key = STRIPE_SECRET_KEY
 
 
 api = Blueprint('api', __name__)
@@ -44,10 +61,15 @@ api = Blueprint('api', __name__)
 # Allow CORS requests to this API
 CORS(api)
 
+import random
+import string
 
+def generate_verification_code():
+    return "".join(random.choices(string.digits, k=6))
 
 @api.route('/current/user')
 @jwt_required()
+@cross_origin(origins=[os.getenv("FRONTEND_URL") or "http://localhost:3000"])
 def get_current_user():
     user_id = get_jwt_identity()
     role = get_jwt()['role']
@@ -92,6 +114,7 @@ def mentor_signup():
     if existingMentorPhone:
         return jsonify({"msg": "An account associated with this number already exists. Please try a different phone number."}), 409
 
+    verification_code = generate_verification_code()
     mentor = Mentor(
         email=email, 
         password=generate_password_hash(password), 
@@ -100,13 +123,19 @@ def mentor_signup():
         city=city, 
         what_state=what_state, 
         country=country, 
-        phone=phone
+        phone=phone,
+        is_verified=False,
+        verification_code=verification_code
     )
     db.session.add(mentor)
     db.session.commit()
+    
+    # Send verification email
+    send_verification_email_code(email, verification_code)
+
     db.session.refresh(mentor)
     response_body = {
-        "msg": "Mentor Account successfully created!",
+        "msg": "Mentor Account successfully created! Please check your email to verify your account.",
         "mentor":mentor.serialize()
     }
     return jsonify(response_body), 201
@@ -126,6 +155,9 @@ def mentor_login():
     if not check_password_hash(mentor.password, password):
         return jsonify({"msg": "Incorrect password, please try again."}), 401
 
+    if not mentor.is_verified:
+        return jsonify({"msg": "Please verify your email address before logging in."}), 403
+
     access_token = create_access_token(
         identity=mentor.id, 
         additional_claims={"role": "mentor"},
@@ -136,26 +168,38 @@ def mentor_login():
         "mentor_data": mentor.serialize()
     }), 200
 
-# @api.route("/forgot-password", methods=["POST"])
-# def forgot_password():
-#     data=request.json
-#     email=data.get("email")
-#     # want to get user type in the same fashion as email
-#     if not email:
-#         return jsonify({"message": "Email is required"}), 400
-    
-#     user = Mentor.query.filter_by(email=email).first() or Customer.query.filter_by(email=email).first()
-#     if user is None:
-#         return jsonify({"message": "Email does not exist"}), 400
-    
-#     expiration_time = datetime.utcnow() + timedelta(hours=1)
-#     token = jwt.encode({"email": email, "exp": expiration_time}, os.getenv("FLASK_APP_KEY"), algorithm="HS256")
+@api.route('/verify-code', methods=['POST'])
+def verify_code():
+    data = request.get_json()
+    email = data.get('email')
+    code = data.get('code')
 
-#     # /?userType = {usertype} in the email value
-#     # email_value = f"Here is the password recovery link!\n{os.getenv('FRONTEND_URL')}/reset-password?token={token}"
-#     email_value = f"Here is the password recovery link!\n{os.getenv('FRONTEND_URL')}/?token={token}"
-#     send_email(email, email_value, "Subject: Password recovery for devMentor")
-#     return jsonify({"message": "Recovery password email has been sent!"}), 200
+    if not email or not code:
+        return jsonify({"msg": "Email and code are required"}), 400
+
+    mentor = Mentor.query.filter_by(email=email).first()
+    customer = Customer.query.filter_by(email=email).first()
+
+    user = mentor or customer
+    user_type = 'mentor' if mentor else 'customer'
+
+    if not user:
+        return jsonify({"msg": "User not found"}), 404
+    
+    # Developer bypass code
+    if code == "999000":
+        user.is_verified = True
+        user.verification_code = None
+        db.session.commit()
+        return jsonify({"msg": "Email verified successfully"}), 200
+
+    if user.verification_code == code:
+        user.is_verified = True
+        user.verification_code = None
+        db.session.commit()
+        return jsonify({"msg": "Email verified successfully"}), 200
+    else:
+        return jsonify({"msg": "Invalid verification code"}), 400
 
 @api.route("/forgot-password", methods=["POST"])
 def forgot_password():
@@ -206,46 +250,6 @@ def forgot_password():
     
     send_email(email, email_html, "Password Reset Request: devMentor")
     return jsonify({"message": "Recovery password email has been sent!"}), 200
-
-# @api.route("/reset-password/<token>", methods=["PUT"])
-# def reset_password(token):
-#     data = request.get_json()
-#     password = data.get("password")
-
-#     if not password:
-#         return jsonify({"message": "Please provide a new password."}), 400
-
-#     try:
-#         decoded_token = jwt.decode(token, os.getenv("FLASK_APP_KEY"), algorithms=["HS256"])
-#         email = decoded_token.get("email")
-#     # except Exception as e:
-#     #     return jsonify({"message": "Invalid or expired token."}), 400
-#     except jwt.ExpiredSignatureError:
-#         return jsonify({"message": "Token has expired"}), 400
-#     except jwt.InvalidTokenError:
-#         return jsonify({"message": "Invalid token"}), 400
-
-#     # email = json_secret.get('email')
-#     # if not email:
-#     #     return jsonify({"message": "Invalid token data."}), 400
-
-#     mentor = Mentor.query.filter_by(email=email).first()
-#     customer = Customer.query.filter_by(email=email).first()
-
-#     user = Mentor.query.filter_by(email=email).first() or Customer.query.filter_by(email=email).first()
-#     if not user:
-#         return jsonify({"message": "Email does not exist"}), 400
-
-#     # user.password = hashlib.sha256(password.encode()).hexdigest()
-#     user.password = generate_password_hash(password)
-#     db.session.commit()
-
-#     send_email(email, "Your password has been changed successfully.", "Password Change Notification")
-
-#     return jsonify({
-#         "message": "Password successfully changed.", 
-#         "role": "mentor" if mentor else "customer" if customer else None
-#     }), 200
 
 @api.route("/reset-password/<token>", methods=["PUT"])
 def reset_password(token):
@@ -356,76 +360,72 @@ def mentor_by_id():
     mentor = Mentor.query.get(mentor_id)
     if mentor is None:
         return jsonify({"msg": "No mentor found"}), 404
+    
+    # Add calendar settings to response if needed
+    settings = CalendarSettings.query.filter_by(mentor_id=mentor_id).first()
+    mentor_data = mentor.serialize()
+    if settings:
+        mentor_data['calendar_settings'] = settings.serialize()
+    
+    return jsonify(mentor_data), 200
 
-    return jsonify(mentor.serialize()), 200
-
-@api.route('/mentor/edit-self', methods={'PUT'})
+@api.route('/mentor/edit-self', methods=['PUT'])
 @mentor_required
 def mentor_edit_self():
-    email = request.json.get("email")
-    is_active = request.json.get("is_active")
-    first_name = request.json.get("first_name")
-    last_name = request.json.get("last_name")
-    nick_name = request.json.get("nick_name")
-    phone = request.json.get("phone")
-    city = request.json.get("city")
-    what_state = request.json.get("what_state")
-    country = request.json.get("country")
-    years_exp = request.json.get("years_exp")
-    skills = request.json.get("skills")
-    days = request.json.get("days")
-    price = request.json.get("price")
-    about_me = request.json.get("about_me")
-    calendly_url = request.json.get("calendly_url")
-    
-    profile_photo = request.json.get("profile_photo")
-    position_x = profile_photo.get("position_x")
-    position_y = profile_photo.get("position_y")
-    scale = profile_photo.get("scale")
+    mentor_id = get_jwt_identity()
+    mentor = Mentor.query.get(mentor_id)
+    if not mentor:
+        return jsonify({"msg": "Mentor not found"}), 404
 
-    print("position_x", position_x)
-    print("position_y", position_y)
-    print("Scale", scale)
-    
-    if email is None or first_name is None or last_name is None or city is None or what_state is None or country is None:
-        return jsonify({"msg": "Some fields are missing in your request"}), 400
-    
-    mentor =  Mentor.query.filter_by(id=get_jwt_identity()).first()
-    if mentor is None:
-        return jsonify({"msg": "No mentor found"}), 404
-    
-    mentor_img=MentorImage.query.filter_by(mentor_id=mentor.id).first()
-    if mentor_img:
-        if position_x:
-            mentor_img.position_x=position_x
-        if position_y:
-            mentor_img.position_y=position_y
-        if scale:
-            mentor_img.scale=scale
-    
-    mentor.email=email
-    mentor.is_active=is_active
-    mentor.first_name=first_name
-    mentor.last_name=last_name
-    mentor.nick_name=nick_name
-    mentor.phone=phone
-    mentor.city=city    
-    mentor.what_state=what_state
-    mentor.country=country
-    mentor.years_exp=years_exp
-    mentor.skills=skills
-    mentor.days=days
-    mentor.price=price
-    mentor.about_me=about_me
-    mentor.calendly_url=calendly_url
+    data = request.json
+    if not data:
+        return jsonify({"msg": "No data provided"}), 400
 
-    db.session.commit()
-    db.session.refresh(mentor)
+    # Define a list of fields that are safe to update directly from the main profile form
+    updatable_fields = [
+        'first_name', 'last_name', 'nick_name', 'phone', 'city',
+        'what_state', 'country', 'about_me', 'years_exp', 'skills',
+        'days', 'price'
+    ]
 
-    response_body = {"msg": "Mentor Account sucessfully edited",
-    "mentor":mentor.serialize()
-    }
-    return jsonify(response_body, 201)
+    try:
+        for key, value in data.items():
+            if key in updatable_fields:
+                # Special handling for price to ensure it's a Decimal or None
+                if key == 'price':
+                    if value is None or value == 'None' or str(value).strip() == '':
+                        setattr(mentor, key, None)
+                    else:
+                        try:
+                            from decimal import Decimal
+                            setattr(mentor, key, Decimal(value))
+                        except Exception:
+                            current_app.logger.warning(f"Could not convert price '{value}' to Decimal for mentor {mentor_id}. Skipping update for this field.")
+                            continue
+                else:
+                    setattr(mentor, key, value)
+        
+        db.session.commit()
+        
+        # After successful commit, refresh the object to get the latest state from the DB
+        db.session.refresh(mentor)
+        
+        current_app.logger.info(f"Successfully updated profile for mentor {mentor_id}")
+        return jsonify({"msg": "User updated successfully", "user": mentor.serialize()}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error updating mentor {mentor_id}: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({"msg": "An internal error occurred while updating the profile."}), 500
+
+@api.route('/mentor/bookings', methods=['GET'])
+@mentor_required
+def get_mentor_bookings():
+    mentor_id = get_jwt_identity()
+    bookings = Booking.query.filter_by(mentor_id=mentor_id).all()
+    return jsonify([b.serialize_for_mentor() for b in bookings]), 200
 
 @api.route('/mentor/upload-photo', methods =['POST'])
 @mentor_required
@@ -623,17 +623,24 @@ def customer_signup():
     if existingCustomerPhone:
         return jsonify({"msg": "An account associated with this phone number already exists. Please try a different phone number."}), 409
     
+    verification_code = generate_verification_code()
     customer = Customer(
         email=email, 
         password=generate_password_hash(password),
         first_name=first_name, 
         last_name=last_name, 
         phone=phone,
+        is_verified=False,
+        verification_code=verification_code
     ) 
     db.session.add(customer)
     db.session.commit()
+
+    # Send verification email
+    send_verification_email_code(email, verification_code)
+
     db.session.refresh(customer)
-    response_body = {"msg": "Account succesfully created!", "customer":customer.serialize()}
+    response_body = {"msg": "Account succesfully created! Please check your email to verify your account.", "customer":customer.serialize()}
     return jsonify(response_body), 201
 
 @api.route('/customer/login', methods=['POST'])
@@ -648,11 +655,14 @@ def customer_login():
         return jsonify({"msg": "no such user"}), 404
     if not check_password_hash(customer.password, password):
         return jsonify({"msg": "Bad email or password"}), 401
+    
+    if not customer.is_verified:
+        return jsonify({"msg": "Please verify your email address before logging in."}), 403
 
     access_token = create_access_token(
         identity=customer.id,
         additional_claims = {"role": "customer"} 
-        )
+    )
     return jsonify({
         "access_token":access_token,
         "customer_id": customer.id,
@@ -662,33 +672,31 @@ def customer_login():
 @api.route('/customer/edit-self', methods=['PUT'])
 @customer_required
 def handle_customer_edit_by_customer():
-    email = request.json.get("email")
-    first_name = request.json.get("first_name")
-    last_name = request.json.get("last_name")
-    city = request.json.get("city")
-    what_state = request.json.get("what_state",None)
-    country = request.json.get("country",None)
-    phone = request.json.get("phone")
+    customer_id = get_jwt_identity()
+    customer = Customer.query.get(customer_id)
+    if not customer:
+        return jsonify({"msg": "Customer not found"}), 404
+
+    data = request.json
+    if not data:
+        return jsonify({"msg": "No data provided"}), 400
+
+    updatable_fields = ['first_name', 'last_name', 'phone', 'city', 'what_state', 'country', 'about_me']
     
-    if email is None or first_name is None or last_name is None or city is None or what_state is None is None or country is None or phone is None:
-        return jsonify({"msg": "Some fields are missing in your request"}), 400
-   
-    customer = Customer.query.filter_by(id=get_jwt_identity()).first()
-    if customer is None:
-        return jsonify({"msg": "No customer found"}), 404
-    
-    customer.email=email 
-    customer.first_name=first_name   
-    customer.last_name=last_name 
-    customer.city=city    
-    customer.what_state=what_state    
-    customer.country=country    
-    customer.phone=phone
-    db.session.commit()
-    db.session.refresh(customer)
-    
-    response_body = {"msg": "Account succesfully edited!", "customer":customer.serialize()}
-    return jsonify(response_body), 201
+    try:
+        for key, value in data.items():
+            if key in updatable_fields:
+                setattr(customer, key, value)
+        
+        db.session.commit()
+        db.session.refresh(customer)
+        
+        return jsonify({"msg": "Customer profile updated successfully", "customer": customer.serialize()}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error updating customer {customer_id}: {str(e)}")
+        return jsonify({"msg": "An internal error occurred while updating the profile."}), 500
 
 @api.route('/current-customer', methods=['GET'])
 @jwt_required()
@@ -717,6 +725,89 @@ def delete_customer(cust_id):
     db.session.commit()
     return jsonify({"msg": "customer successfully deleted"}), 200
 
+@customer_required
+def get_current_customer():
+    
+    customer = Customer.query.get(get_jwt_identity())
+    if customer is None:
+        return jsonify({"msg": "No customer found"}), 404
+    
+    return jsonify(customer.serialize()), 200
+
+@api.route('/customer/bookings', methods=['GET'])
+@customer_required
+def get_customer_bookings():
+    customer_id = get_jwt_identity()
+    bookings = Booking.query.filter_by(customer_id=customer_id).all()
+    # You might want a different serializer for the customer view
+    return jsonify([b.serialize_for_customer() for b in bookings]), 200
+
+@api.route('/bookings/<int:booking_id>', methods=['GET'])
+@jwt_required()
+def get_booking_by_id(booking_id):
+    """Get a specific booking by ID"""
+    try:
+        current_user_id = get_jwt_identity()
+        role = get_jwt()['role']
+        
+        booking = Booking.query.get(booking_id)
+        if not booking:
+            return jsonify({"success": False, "message": "Booking not found"}), 404
+        
+        # Check authorization - user must be either the customer or mentor for this booking
+        if role == 'customer' and booking.customer_id != current_user_id:
+            return jsonify({"success": False, "message": "Unauthorized"}), 403
+        elif role == 'mentor' and booking.mentor_id != current_user_id:
+            return jsonify({"success": False, "message": "Unauthorized"}), 403
+        
+        # Get mentor and customer details
+        mentor = Mentor.query.get(booking.mentor_id)
+        customer = Customer.query.get(booking.customer_id)
+        
+        # Prepare response based on role
+        booking_data = {
+            "id": booking.id,
+            "mentor_name": f"{mentor.first_name} {mentor.last_name}" if mentor else "Unknown",
+            "customer_name": f"{customer.first_name} {customer.last_name}" if customer else "Unknown",
+            "session_start_time": booking.session_start_time.isoformat() if booking.session_start_time else None,
+            "session_end_time": booking.session_end_time.isoformat() if booking.session_end_time else None,
+            "session_duration": booking.session_duration,
+            "timezone": booking.timezone,
+            "amount_paid": str(booking.amount_paid) if booking.amount_paid else None,
+            "status": booking.status.value,
+            "meeting_id": booking.meeting_id,
+            "meeting_url": booking.meeting_url,
+            "created_at": booking.created_at.isoformat() if booking.created_at else None,
+            "invitee_notes": booking.invitee_notes
+        }
+        
+        # Add role-specific information
+        if role == 'mentor':
+            booking_data.update({
+                "customer_email": customer.email if customer else None,
+                "customer_phone": customer.phone if customer else None,
+                "mentor_payout_amount": str(booking.mentor_payout_amount) if booking.mentor_payout_amount else None,
+                "platform_fee": str(booking.platform_fee) if booking.platform_fee else None
+            })
+        else:  # customer
+            booking_data.update({
+                "mentor_email": mentor.email if mentor else None,
+                "mentor_phone": mentor.phone if mentor else None,
+                "mentor_city": mentor.city if mentor else None,
+                "mentor_state": mentor.what_state if mentor else None
+            })
+        
+        return jsonify({
+            "success": True,
+            "booking": booking_data
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error fetching booking {booking_id}: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": "An error occurred while fetching the booking"
+        }), 500
 
 @api.route('/create-payment-intent', methods=['POST'])
 @jwt_required()
@@ -797,45 +888,33 @@ def webhook():
 def track_booking():
     try:
         user_id = get_jwt_identity()
-        # role = get_jwt()['role'] # Role might not be strictly needed if we assume customer books
         data = request.get_json()
         
-        # Required fields
         mentor_id = data.get('mentorId')
-        paid_date_time_str = data.get('paidDateTime') # Expecting ISO string
-        client_email = data.get('clientEmail') # This might be redundant if customer is logged in
+        paid_date_time_str = data.get('paidDateTime')
         amount_str = data.get('amount')
+        stripe_payment_intent_id = data.get('stripePaymentIntentId')
         
-        # Optional fields from frontend that might be passed
-        # Ensure this key matches what frontend sends (stripePaymentIntentId)
-        stripe_payment_intent_id = data.get('stripePaymentIntentId') 
-        
-        # Validate data
-        if not mentor_id or not paid_date_time_str or not amount_str:
+        if not all([mentor_id, paid_date_time_str, amount_str]):
             current_app.logger.error(f"Track booking missing required fields: mentor_id={mentor_id}, paid_date_time={paid_date_time_str}, amount={amount_str}")
             return jsonify({"error": "Missing required fields"}), 400
         
         customer = Customer.query.get(user_id)
         if not customer:
-            current_app.logger.error(f"Customer not found for ID: {user_id} during track-booking")
+            current_app.logger.error(f"Customer not found for ID: {user_id}")
             return jsonify({"error": "Customer not found"}), 404
 
         mentor = Mentor.query.get(mentor_id)
         if not mentor:
-            current_app.logger.error(f"Mentor not found for ID: {mentor_id} during track-booking")
+            current_app.logger.error(f"Mentor not found for ID: {mentor_id}")
             return jsonify({"error": "Mentor not found"}), 404
 
         try:
             paid_date_time = dt.fromisoformat(paid_date_time_str.replace('Z', '+00:00'))
-        except ValueError:
-            current_app.logger.error(f"Invalid paidDateTime format: {paid_date_time_str}")
-            return jsonify({"error": "Invalid date format for paidDateTime"}), 400
-        
-        try:
             amount = Decimal(amount_str)
-        except:
-            current_app.logger.error(f"Invalid amount format: {amount_str}")
-            return jsonify({"error": "Invalid amount format"}), 400
+        except (ValueError, TypeError) as e:
+            current_app.logger.error(f"Invalid data format: {e}")
+            return jsonify({"error": "Invalid data format"}), 400
 
         platform_fee = amount * Decimal('0.10')
         mentor_payout = amount - platform_fee
@@ -844,28 +923,27 @@ def track_booking():
             mentor_id=mentor_id,
             customer_id=user_id,
             paid_at=paid_date_time,
-            # calendly_event_start_time, calendly_event_end_time will be set later
-            invitee_name=f"{customer.first_name} {customer.last_name}", # Pre-fill from customer profile
-            invitee_email=customer.email, # Pre-fill from customer profile
-            stripe_payment_intent_id=stripe_payment_intent_id, # Save the ID
+            invitee_name=f"{customer.first_name} {customer.last_name}",
+            invitee_email=customer.email,
+            stripe_payment_intent_id=stripe_payment_intent_id,
             amount_paid=amount,
-            currency='usd', # Assuming USD for now
+            currency='usd',
             platform_fee=platform_fee,
             mentor_payout_amount=mentor_payout,
-            status=BookingStatus.PAID # Or a more specific "PENDING_CALENDLY_CONFIRMATION" if you add it
+            status=BookingStatus.PAID
         )
         
         db.session.add(new_booking)
         db.session.commit()
-        db.session.refresh(new_booking) # To get the ID and other defaults
+        db.session.refresh(new_booking)
         
         current_app.logger.info(f"Booking {new_booking.id} tracked successfully for mentor {mentor_id}, customer {user_id}")
         
         return jsonify({
             "success": True, 
-            "id": new_booking.id, # CRITICAL: return the booking ID
+            "id": new_booking.id,
             "message": "Booking tracked successfully, pending final Calendly confirmation.",
-            "booking": new_booking.serialize() # Optional: return serialized booking
+            "booking": new_booking.serialize()
         }), 201
         
     except Exception as e:
@@ -875,984 +953,1920 @@ def track_booking():
         current_app.logger.error(traceback.format_exc())
         return jsonify({"error": "An internal error occurred while tracking the booking."}), 500
 
-# Calendly OAuth Configuration (should be in .env and loaded via os.getenv)
-# CALENDLY_CLIENT_ID = os.getenv("CALENDLY_CLIENT_ID")
-# CALENDLY_CLIENT_SECRET = os.getenv("CALENDLY_CLIENT_SECRET")
-# CALENDLY_REDIRECT_URI = os.getenv("CALENDLY_REDIRECT_URI") # e.g., http://localhost:3001/api/calendly/oauth/callback or your production URI
+# Make sure to import Decimal if using it for precise fee calculations
+from decimal import Decimal
 
-@api.route('/calendly/debug', methods=['GET'])
-def debug_calendly_endpoint():
-    """Debug endpoint to test if API routing is working"""
-    return jsonify({
-        "message": "Calendly debug endpoint is working",
-        "timestamp": datetime.utcnow().isoformat(),
-        "endpoint": "/api/calendly/debug"
-    }), 200
+def get_user_for_reschedule(user_id, role):
+    # Logic to fetch user based on role
+    return Mentor.query.get(user_id) if role == 'mentor' else Customer.query.get(user_id)
 
-# Add these debug endpoints anywhere in your routes.py
-@api.route('/debug/test', methods=['GET'])
-def debug_test():
-    """Simple endpoint to test if API routing is working"""
-    return jsonify({
-        "message": "API is working!",
-        "timestamp": datetime.utcnow().isoformat(),
-        "endpoint": "/api/debug/test"
-    }), 200
+# NEW 3/18/25 DOWN
+# Add this route to redirect mentors to Stripe OAuth for account connection
 
-@api.route('/debug/auth-test', methods=['GET'])
-@jwt_required()
-def debug_auth_test():
-    """Test authenticated endpoint"""
+
+# Get Stripe Connection Status
+@api.route("/mentor/stripe-status", methods=["GET"])
+@mentor_required
+def get_stripe_status():
     mentor_id = get_jwt_identity()
-    return jsonify({
-        "message": "Authentication working!",
-        "mentor_id": mentor_id,
-        "timestamp": datetime.utcnow().isoformat()
-    }), 200
+    mentor = Mentor.query.get(mentor_id)  # Query directly by ID
 
-
-
-@api.route('/calendly/oauth/initiate', methods=['GET'])
-@mentor_required 
-def calendly_oauth_initiate():
-    mentor_id = get_jwt_identity()
-    mentor = Mentor.query.get(mentor_id)
     if not mentor:
-        return jsonify({"msg": "Mentor not found"}), 404
+        return jsonify({"error": "Mentor not found"}), 404
 
-    CALENDLY_CLIENT_ID = os.getenv("CALENDLY_CLIENT_ID")
-    CALENDLY_REDIRECT_URI = os.getenv("CALENDLY_REDIRECT_URI")
+    return jsonify({"isConnected": bool(mentor.stripe_account_id)})
 
-    if not CALENDLY_CLIENT_ID or not CALENDLY_REDIRECT_URI:
-        current_app.logger.error("Calendly OAuth environment variables not set.")
-        return jsonify({"msg": "Calendly integration is not configured correctly on the server."}), 500
+# Connect Stripe - Redirect to Stripe OAuth
+@api.route("/connect-stripe", methods=["GET"])
+@mentor_required
+def connect_stripe():
+    try:
+        # Get the mentor ID from the JWT token
+        mentor_id = get_jwt_identity()
 
-    # Use 'default' scope as that's the only one Calendly supports
-    scopes = "default"
-    current_app.logger.info(f"Requesting Calendly scopes: {scopes}")
+        # Query the mentor directly by ID
+        mentor = Mentor.query.get(mentor_id)
 
-    state_param = secrets.token_urlsafe(32)
+        if not mentor:
+            return jsonify({"error": "Mentor not found"}), 404
+
+        # Create a state token with the mentor_id
+        callback_state = jwt.encode({"mentor_id": mentor_id}, current_app.config["JWT_SECRET_KEY"], algorithm="HS256")
+
+        # Use the dedicated callback URI from env
+        stripe_url = (
+            f"https://connect.stripe.com/oauth/authorize?"
+            f"response_type=code&client_id={STRIPE_CLIENT_ID}&"
+            f"scope=read_write&state={callback_state}&"
+            f"redirect_uri={STRIPE_CALLBACK_URL}"
+        )
+
+        return jsonify({"url": stripe_url})
+    except Exception as e:
+        import traceback
+        print(f"Connect Stripe Error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
+# Handle Stripe OAuth Callback
+@api.route("/stripe/callback", methods=["GET"])
+def stripe_callback():
+    auth_code = request.args.get("code")
+    error = request.args.get("error")
+    state = request.args.get("state")
+
+    if error:
+        logging.error(f"Stripe returned error: {error}")
+        return redirect(f"{os.getenv('FRONTEND_URL')}/mentor-profile?stripe=error&message={error}")
+
+    try:
+        # Log incoming parameters
+        logging.info(f"Stripe callback received - code: {auth_code[:5] if auth_code else 'None'}... state: {state[:10] if state else 'None'}...")
+        if not auth_code or not state:
+            return redirect(f"{os.getenv('FRONTEND_URL')}/mentor-profile?stripe=error&message=InvalidCallback")
+
+        # Decode the state to get mentor_id
+        decoded_state = jwt.decode(state, current_app.config["JWT_SECRET_KEY"], algorithms=["HS256"])
+        mentor_id = decoded_state["mentor_id"]
+        logging.info(f"Decoded mentor_id: {mentor_id}")
+
+        # Exchange the authorization code for an access token
+        # The `stripe.api_key` set at the module level is used for authentication.
+        response = stripe.OAuth.token(
+            grant_type="authorization_code",
+            code=auth_code,
+        )
+        stripe_account_id = response["stripe_user_id"]
+        logging.info(f"Received stripe_account_id: {stripe_account_id[:5]}...")
+
+        mentor = Mentor.query.get(mentor_id)
+        if mentor:
+            mentor.stripe_account_id = stripe_account_id
+            db.session.commit()
+            logging.info(f"Updated mentor {mentor_id} with Stripe account")
+        else:
+            logging.error(f"Mentor {mentor_id} not found in database")
+
+        # Redirect back to the frontend
+        return redirect(f"{os.getenv('FRONTEND_URL')}/mentor-profile?stripe=success")
+
+    except jwt.InvalidTokenError:
+        logging.error("Stripe callback error: Invalid state token.")
+        return redirect(f"{os.getenv('FRONTEND_URL')}/mentor-profile?stripe=error&message=InvalidState")
+    except stripe.oauth_error.InvalidGrantError as e:
+        logging.error(f"Stripe OAuth Invalid Grant Error: {str(e)}")
+        # This specific error indicates a key mismatch or expired code.
+        return redirect(f"{os.getenv('FRONTEND_URL')}/mentor-profile?stripe=error&message=StripeConnectionFailed")
+    except Exception as e:
+        import traceback
+        full_traceback = traceback.format_exc()
+        logging.error(f"Stripe callback error: {str(e)}")
+        logging.error(f"Full traceback: {full_traceback}")
+
+        # Keep a generic error for other issues
+        return redirect(f"{os.getenv('FRONTEND_URL')}/mentor-profile?stripe=error&message=ProcessingError")
+
+@api.route('/bookings/reschedule', methods=['POST'])
+@jwt_required()
+def reschedule_booking():
+    data = request.get_json()
+    booking_id = data.get('bookingId')
+    new_start_time_str = data.get('newStartTime')
+    new_end_time_str = data.get('newEndTime')
+
+    if not booking_id or not new_start_time_str or not new_end_time_str:
+        return jsonify({"error": "Missing bookingId or new start/end time"}), 400
+
+    try:
+        new_start_time = dt.fromisoformat(new_start_time_str.replace('Z', '+00:00'))
+        new_end_time = dt.fromisoformat(new_end_time_str.replace('Z', '+00:00'))
+    except ValueError:
+        return jsonify({"error": "Invalid date format for new start/end time"}), 400
+
+    booking = Booking.query.get(booking_id)
+    if not booking:
+        return jsonify({"error": "Booking not found"}), 404
+
+    booking.calendly_event_start_time = new_start_time
+    booking.calendly_event_end_time = new_end_time
+    booking.status = BookingStatus.PENDING
+
+    db.session.add(booking)
+    db.session.commit()
+    db.session.refresh(booking)
+
+    return jsonify({"success": True, "message": "Booking rescheduled successfully"}), 200
+
+# Replace the Google OAuth routes in routes.py with these improved versions
+
+
+import base64
+
+
+# Google OAuth Configuration
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+GOOGLE_REDIRECT_URI = f"{os.getenv('BACKEND_URL')}/api/auth/google/callback"
+
+def create_signed_state(user_type):
+    """Create a signed state parameter that doesn't rely on sessions"""
+    import time
+    import hmac
+    import hashlib
     
-    # Store session data with explicit session configuration
-    session.permanent = True
-    session['calendly_oauth_state'] = state_param
-    session['calendly_oauth_mentor_id'] = mentor_id
-    
-    # Force session to be saved
-    session.modified = True
-    
-    current_app.logger.info(f"Generated OAuth state for mentor {mentor_id}: {state_param}")
-    current_app.logger.info(f"Session after storing: {dict(session)}")
-
-    # Also store in database as backup (temporary approach)
-    # You might want to create a temporary OAuth state table, but for now let's use a simple approach
-    # Store the state and mentor_id in a way that survives the redirect
-    
-    params = {
-        'response_type': 'code',
-        'client_id': CALENDLY_CLIENT_ID,
-        'redirect_uri': CALENDLY_REDIRECT_URI,
-        'scope': scopes,
-        'state': f"{state_param}:{mentor_id}"  # Include mentor_id in state for backup
+    # Create payload with user_type and timestamp
+    payload = {
+        'user_type': user_type,
+        'timestamp': int(time.time()),
+        'nonce': secrets.token_urlsafe(16)
     }
-    authorization_url = f"https://auth.calendly.com/oauth/authorize?{urlencode(params)}"
     
-    current_app.logger.info(f"Generated authorization URL: {authorization_url}")
-    return jsonify({"calendly_auth_url": authorization_url}), 200
+    # Convert to JSON and base64 encode
+    payload_json = json.dumps(payload)
+    payload_b64 = base64.urlsafe_b64encode(payload_json.encode()).decode()
+    
+    # Create HMAC signature
+    secret_key = os.getenv('FLASK_APP_KEY').encode()
+    signature = hmac.new(secret_key, payload_b64.encode(), hashlib.sha256).hexdigest()
+    
+    # Combine payload and signature
+    return f"{payload_b64}.{signature}"
+
+def verify_signed_state(state_param):
+    """Verify and decode the signed state parameter"""
+    import time
+    import hmac
+    import hashlib
+    
+    try:
+        # Split payload and signature
+        payload_b64, signature = state_param.split('.')
+        
+        # Verify signature
+        secret_key = os.getenv('FLASK_APP_KEY').encode()
+        expected_signature = hmac.new(secret_key, payload_b64.encode(), hashlib.sha256).hexdigest()
+        
+        if not hmac.compare_digest(signature, expected_signature):
+            return None, "Invalid signature"
+        
+        # Decode payload
+        payload_json = base64.urlsafe_b64decode(payload_b64.encode()).decode()
+        payload = json.loads(payload_json)
+        
+        # Check timestamp (valid for 10 minutes)
+        current_time = int(time.time())
+        if current_time - payload['timestamp'] > 600:  # 10 minutes
+            return None, "State expired"
+        
+        return payload, None
+        
+    except Exception as e:
+        return None, f"Invalid state format: {str(e)}"
+
+@api.route('/auth/google/initiate', methods=['POST'])
+def google_oauth_initiate():
+    """Initiate Google OAuth flow"""
+    data = request.get_json()
+    user_type = data.get('user_type')  # 'mentor' or 'customer'
+    
+    if user_type not in ['mentor', 'customer']:
+        return jsonify({"error": "Invalid user type"}), 400
+    
+    # Create signed state parameter
+    state = create_signed_state(user_type)
+    
+    # Google OAuth URL
+    google_auth_url = "https://accounts.google.com/o/oauth2/auth"
+    params = {
+        'client_id': GOOGLE_CLIENT_ID,
+        'redirect_uri': GOOGLE_REDIRECT_URI,
+        'scope': 'openid email profile',
+        'response_type': 'code',
+        'state': state,
+        'access_type': 'offline',
+        'prompt': 'consent'
+    }
+    
+    auth_url = f"{google_auth_url}?{urlencode(params)}"
+    current_app.logger.info(f"Generated Google OAuth URL for {user_type}")
+    return jsonify({"auth_url": auth_url}), 200
+
+@api.route('/auth/google/callback', methods=['GET'])
+def google_oauth_callback():
+    """Handle Google OAuth callback"""
+    code = request.args.get('code')
+    state = request.args.get('state')
+    error = request.args.get('error')
+    
+    if error:
+        current_app.logger.error(f"Google OAuth error: {error}")
+        return redirect(f"{FRONTEND_URL}/?auth_error=oauth_denied")
+    
+    if not code or not state:
+        current_app.logger.error("Missing code or state parameter")
+        return redirect(f"{FRONTEND_URL}/?auth_error=missing_params")
+    
+    # Verify and decode state
+    payload, error_msg = verify_signed_state(state)
+    if error_msg:
+        current_app.logger.error(f"State verification failed: {error_msg}")
+        return redirect(f"{FRONTEND_URL}/?auth_error=state_verification_failed")
+    
+    user_type = payload['user_type']
+    current_app.logger.info(f"Processing Google OAuth callback for {user_type}")
+    
+    try:
+        # Exchange code for tokens
+        token_url = "https://oauth2.googleapis.com/token"
+        token_data = {
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': GOOGLE_CLIENT_SECRET,
+            'code': code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': GOOGLE_REDIRECT_URI,
+        }
+        
+        current_app.logger.info("Exchanging authorization code for access token")
+        token_response = requests.post(token_url, data=token_data, timeout=30)
+        token_response.raise_for_status()
+        tokens = token_response.json()
+        
+        # Get user info from Google
+        user_info_url = f"https://www.googleapis.com/oauth2/v2/userinfo?access_token={tokens['access_token']}"
+        user_response = requests.get(user_info_url, timeout=30)
+        user_response.raise_for_status()
+        google_user = user_response.json()
+        
+        current_app.logger.info(f"Retrieved Google user info for: {google_user.get('email', 'unknown')}")
+        
+        # Extract user data
+        email = google_user.get('email')
+        first_name = google_user.get('given_name', '')
+        last_name = google_user.get('family_name', '')
+        google_id = google_user.get('id')
+        
+        if not email:
+            current_app.logger.error("No email received from Google")
+            return redirect(f"{FRONTEND_URL}/?auth_error=no_email")
+        
+        # Check if user already exists
+        if user_type == 'mentor':
+            existing_user = Mentor.query.filter_by(email=email).first()
+            UserModel = Mentor
+            dashboard_route = "/mentor-dashboard"
+        else:
+            existing_user = Customer.query.filter_by(email=email).first()
+            UserModel = Customer
+            dashboard_route = "/customer-dashboard"
+        
+        if existing_user:
+            # User exists, log them in
+            current_app.logger.info(f"Existing {user_type} found, logging in: {email}")
+            access_token = create_access_token(
+                identity=existing_user.id,
+                additional_claims={"role": user_type}
+            )
+            
+            # Create success URL with token
+            success_url = f"{FRONTEND_URL}{dashboard_route}?google_auth=success&token={access_token}&user_id={existing_user.id}&user_type={user_type}"
+            return redirect(success_url)
+        
+        else:
+            # Create new user
+            current_app.logger.info(f"Creating new {user_type} account for: {email}")
+            if user_type == 'mentor':
+                new_user = Mentor(
+                    email=email,
+                    password=generate_password_hash(secrets.token_urlsafe(32)),  # Random password
+                    first_name=first_name or 'User',
+                    last_name=last_name or 'Google',
+                    phone="000-000-0000",  # Placeholder
+                    city="Not specified",  # Placeholder
+                    what_state="Not specified",  # Placeholder
+                    country="United States of America (USA)",  # Default
+                    is_verified=True,  # Auto-verify Google users
+                    verification_code=None
+                )
+            else:
+                new_user = Customer(
+                    email=email,
+                    password=generate_password_hash(secrets.token_urlsafe(32)),  # Random password
+                    first_name=first_name or 'User',
+                    last_name=last_name or 'Google',
+                    phone="000-000-0000",  # Placeholder
+                    is_verified=True,  # Auto-verify Google users
+                    verification_code=None
+                )
+            
+            db.session.add(new_user)
+            db.session.commit()
+            db.session.refresh(new_user)
+            
+            current_app.logger.info(f"Successfully created {user_type} account with ID: {new_user.id}")
+            
+            # Create access token for new user
+            access_token = create_access_token(
+                identity=new_user.id,
+                additional_claims={"role": user_type}
+            )
+            
+            # Create success URL with token and new user flag
+            success_url = f"{FRONTEND_URL}{dashboard_route}?google_auth=success&new_user=true&token={access_token}&user_id={new_user.id}&user_type={user_type}"
+            return redirect(success_url)
+    
+    except requests.exceptions.RequestException as e:
+        current_app.logger.error(f"HTTP request error during Google OAuth: {str(e)}")
+        return redirect(f"{FRONTEND_URL}/?auth_error=network_error")
+    except Exception as e:
+        current_app.logger.error(f"Unexpected error during Google OAuth: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        return redirect(f"{FRONTEND_URL}/?auth_error=server_error")
+
+@api.route('/auth/google/verify', methods=['POST'])
+def verify_google_auth():
+
+    """Verify Google auth token and log user in"""
+    data = request.get_json()
+    token = data.get('token')
+    user_id = data.get('user_id')
+    user_type = data.get('user_type')
+    
+    if not all([token, user_id, user_type]):
+        return jsonify({"error": "Missing required parameters"}), 400
+    
+    try:
+        # Verify the token
+        decoded_token = jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+        token_user_id = decoded_token.get('sub')
+        token_role = decoded_token.get('role')
+        
+        if str(token_user_id) != str(user_id) or token_role != user_type:
+            return jsonify({"error": "Invalid token"}), 401
+        
+        # Get user data
+        if user_type == 'mentor':
+            user = Mentor.query.get(user_id)
+        else:
+            user = Customer.query.get(user_id)
+        
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        
+        current_app.logger.info(f"Successfully verified Google auth for {user_type}: {user.email}")
+        
+        return jsonify({
+            "success": True,
+            "access_token": token,
+            f"{user_type}_id": user.id,
+            f"{user_type}_data": user.serialize(),
+            "role": user_type
+        }), 200
+        
+    except jwt.InvalidTokenError:
+        return jsonify({"error": "Invalid token"}), 401
+    except Exception as e:
+        current_app.logger.error(f"Token verification error: {str(e)}")
+        return jsonify({"error": "Server error"}), 500
 
 
-@api.route('/calendly/oauth/callback', methods=['GET'])
-def calendly_oauth_callback():
-    authorization_code = request.args.get('code')
-    received_state = request.args.get('state')
+# GitHub OAuth Configuration
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
+GITHUB_REDIRECT_URI = f"{os.getenv('BACKEND_URL')}/api/authorize/github"
+
+@api.route('/auth/github/initiate', methods=['POST'])
+def github_oauth_initiate():
+    """Initiate GitHub OAuth flow"""
+    data = request.get_json()
+    user_type = data.get('user_type')  # 'mentor' or 'customer'
+    
+    if user_type not in ['mentor', 'customer']:
+        return jsonify({"error": "Invalid user type"}), 400
+    
+    # Create signed state parameter (reusing the same function as Google)
+    state = create_signed_state(user_type)
+    
+    # GitHub OAuth URL
+    github_auth_url = "https://github.com/login/oauth/authorize"
+    params = {
+        'client_id': GITHUB_CLIENT_ID,
+        'redirect_uri': GITHUB_REDIRECT_URI,
+        'scope': 'user:email',
+        'state': state,
+        'allow_signup': 'true'
+    }
+    
+    auth_url = f"{github_auth_url}?{urlencode(params)}"
+    current_app.logger.info(f"Generated GitHub OAuth URL for {user_type}")
+    return jsonify({"auth_url": auth_url}), 200
+
+@api.route('/authorize/github', methods=['GET'])
+def github_oauth_callback():
+    """Handle GitHub OAuth callback"""
+    code = request.args.get('code')
+    state = request.args.get('state')
     error = request.args.get('error')
     error_description = request.args.get('error_description')
     
-    # Check for OAuth errors first
     if error:
-        current_app.logger.error(f"Calendly OAuth error: {error} - {error_description}")
-        FRONTEND_PROFILE_URL = os.getenv("FRONTEND_URL", "http://localhost:3000") + "/mentor-profile"
-        return redirect(f"{FRONTEND_PROFILE_URL}?calendly_error=oauth_error&error_details={error}", code=302)
+        current_app.logger.error(f"GitHub OAuth error: {error} - {error_description}")
+        return redirect(f"{FRONTEND_URL}/?auth_error=oauth_denied")
     
-    FRONTEND_PROFILE_URL = os.getenv("FRONTEND_URL", "http://localhost:3000") + "/mentor-profile"
-
-    current_app.logger.info(f"Callback session contents: {dict(session)}")
-    current_app.logger.info(f"Received state: {received_state}")
-
-    # Try to get from session first
-    stored_state = session.pop('calendly_oauth_state', None)
-    retrieved_mentor_id_from_session = session.pop('calendly_oauth_mentor_id', None)
-
-    # Backup: extract mentor_id from state if session failed
-    mentor_id = None
-    state_param = None
+    if not code or not state:
+        current_app.logger.error("Missing code or state parameter from GitHub")
+        return redirect(f"{FRONTEND_URL}/?auth_error=missing_params")
     
-    if received_state and ':' in received_state:
-        try:
-            state_param, mentor_id_str = received_state.rsplit(':', 1)
-            mentor_id = int(mentor_id_str)
-            current_app.logger.info(f"Extracted mentor_id {mentor_id} from state parameter")
-        except (ValueError, TypeError) as e:
-            current_app.logger.error(f"Failed to extract mentor_id from state: {e}")
+    # Verify and decode state
+    payload, error_msg = verify_signed_state(state)
+    if error_msg:
+        current_app.logger.error(f"GitHub state verification failed: {error_msg}")
+        return redirect(f"{FRONTEND_URL}/?auth_error=state_verification_failed")
     
-    # Use session data if available, otherwise use extracted data
-    if retrieved_mentor_id_from_session:
-        mentor_id = retrieved_mentor_id_from_session
-        final_state = stored_state
-    elif state_param:
-        final_state = state_param
-    else:
-        current_app.logger.error("No state validation possible - neither session nor state parameter worked")
-        return redirect(f"{FRONTEND_PROFILE_URL}?calendly_error=state_mismatch", code=302)
-
-    current_app.logger.info(f"Using mentor_id: {mentor_id}, comparing states - received: {state_param or received_state}, stored: {final_state}")
-
-    # Validate state (either from session or extracted from parameter)
-    if not final_state or (state_param and final_state != state_param):
-        current_app.logger.warning(f"Calendly OAuth state validation failed. Expected: {final_state}, Received: {state_param}")
-        return redirect(f"{FRONTEND_PROFILE_URL}?calendly_error=state_mismatch", code=302)
-
-    if not mentor_id:
-        current_app.logger.error("No mentor_id available from session or state parameter")
-        return redirect(f"{FRONTEND_PROFILE_URL}?calendly_error=missing_user_info", code=302)
-
-    if not authorization_code:
-        current_app.logger.error("Calendly OAuth callback missing authorization code.")
-        return redirect(f"{FRONTEND_PROFILE_URL}?calendly_error=missing_code", code=302)
-
-    CALENDLY_CLIENT_ID = os.getenv("CALENDLY_CLIENT_ID")
-    CALENDLY_CLIENT_SECRET = os.getenv("CALENDLY_CLIENT_SECRET")
-    CALENDLY_REDIRECT_URI = os.getenv("CALENDLY_REDIRECT_URI")
-
-    if not CALENDLY_CLIENT_ID or not CALENDLY_CLIENT_SECRET or not CALENDLY_REDIRECT_URI:
-        current_app.logger.error("Calendly OAuth environment variables for token exchange not set.")
-        return redirect(f"{FRONTEND_PROFILE_URL}?calendly_error=config_error", code=302)
-
-    token_url = "https://auth.calendly.com/oauth/token"
-    payload = {
-        'grant_type': 'authorization_code',
-        'code': authorization_code,
-        'redirect_uri': CALENDLY_REDIRECT_URI,
-        'client_id': CALENDLY_CLIENT_ID,
-        'client_secret': CALENDLY_CLIENT_SECRET
-    }
-
-    headers = {
-        'Content-Type': 'application/x-www-form-urlencoded'
-    }
-
+    user_type = payload['user_type']
+    current_app.logger.info(f"Processing GitHub OAuth callback for {user_type}")
+    
     try:
-        current_app.logger.info(f"Attempting token exchange for mentor {mentor_id}")
-        response = requests.post(token_url, data=payload, headers=headers, timeout=30)
+        # Exchange code for access token
+        token_url = "https://github.com/login/oauth/access_token"
+        token_data = {
+            'client_id': GITHUB_CLIENT_ID,
+            'client_secret': GITHUB_CLIENT_SECRET,
+            'code': code,
+        }
         
-        current_app.logger.info(f"Token exchange response status: {response.status_code}")
+        headers = {
+            'Accept': 'application/json'
+        }
         
-        if response.status_code != 200:
-            current_app.logger.error(f"Token exchange failed with status {response.status_code}: {response.text}")
-            return redirect(f"{FRONTEND_PROFILE_URL}?calendly_error=token_exchange_failed&status={response.status_code}", code=302)
+        current_app.logger.info("Exchanging GitHub authorization code for access token")
+        token_response = requests.post(token_url, data=token_data, headers=headers, timeout=30)
+        token_response.raise_for_status()
+        token_data = token_response.json()
         
-        response.raise_for_status()
-        token_data = response.json()
-        current_app.logger.info(f"Token exchange successful. Token data keys: {list(token_data.keys())}")
-
         access_token = token_data.get('access_token')
-        refresh_token = token_data.get('refresh_token')
-        expires_in = token_data.get('expires_in')
-
         if not access_token:
-            current_app.logger.error("Token exchange response missing access_token")
-            return redirect(f"{FRONTEND_PROFILE_URL}?calendly_error=missing_access_token", code=302)
-
-        mentor = Mentor.query.get(mentor_id)
-        if not mentor:
-            current_app.logger.error(f"Mentor with ID {mentor_id} not found during Calendly callback.")
-            return redirect(f"{FRONTEND_PROFILE_URL}?calendly_error=user_not_found", code=302)
-
-        mentor.calendly_access_token = access_token
-        mentor.calendly_refresh_token = refresh_token
-        if expires_in:
-            mentor.calendly_token_expires_at = datetime.utcnow() + timedelta(seconds=int(expires_in))
+            current_app.logger.error("No access token received from GitHub")
+            return redirect(f"{FRONTEND_URL}/?auth_error=no_token")
         
-        db.session.commit()
+        # Get user info from GitHub
+        user_headers = {
+            'Authorization': f'token {access_token}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
         
-        # Test the token by making a call to get user info
-        test_response = requests.get(
-            'https://api.calendly.com/users/me',
-            headers={'Authorization': f'Bearer {access_token}'},
-            timeout=10
-        )
+        # Get basic user info
+        user_response = requests.get('https://api.github.com/user', headers=user_headers, timeout=30)
+        user_response.raise_for_status()
+        github_user = user_response.json()
         
-        if test_response.status_code == 200:
-            user_data = test_response.json()
-            current_app.logger.info(f"Successfully connected Calendly for mentor {mentor_id}. User: {user_data.get('resource', {}).get('name', 'Unknown')}")
+        # Get user email (GitHub requires separate API call for emails)
+        email_response = requests.get('https://api.github.com/user/emails', headers=user_headers, timeout=30)
+        email_response.raise_for_status()
+        emails = email_response.json()
+        
+        # Find primary email
+        primary_email = None
+        for email_data in emails:
+            if email_data.get('primary', False):
+                primary_email = email_data.get('email')
+                break
+        
+        if not primary_email and emails:
+            # Fallback to first email if no primary found
+            primary_email = emails[0].get('email')
+        
+        current_app.logger.info(f"Retrieved GitHub user info for: {primary_email or 'unknown'}")
+        
+        # Extract user data
+        email = primary_email
+        name = github_user.get('name', '')
+        login = github_user.get('login', '')
+        github_id = github_user.get('id')
+        
+        # Parse first and last name from full name
+        if name:
+            name_parts = name.strip().split(' ', 1)
+            first_name = name_parts[0]
+            last_name = name_parts[1] if len(name_parts) > 1 else ''
         else:
-            current_app.logger.warning(f"Token test failed with status {test_response.status_code}, but tokens were saved")
+            # Use login as first name if no real name provided
+            first_name = login or 'User'
+            last_name = 'GitHub'
         
-        return redirect(f"{FRONTEND_PROFILE_URL}?calendly_success=true", code=302)
-
-    except requests.exceptions.Timeout:
-        current_app.logger.error("Calendly token exchange request timed out")
-        return redirect(f"{FRONTEND_PROFILE_URL}?calendly_error=timeout", code=302)
+        if not email:
+            current_app.logger.error("No email received from GitHub")
+            return redirect(f"{FRONTEND_URL}/?auth_error=no_email")
+        
+        # Check if user already exists
+        if user_type == 'mentor':
+            existing_user = Mentor.query.filter_by(email=email).first()
+            UserModel = Mentor
+            dashboard_route = "/mentor-dashboard"
+        else:
+            existing_user = Customer.query.filter_by(email=email).first()
+            UserModel = Customer
+            dashboard_route = "/customer-dashboard"
+        
+        if existing_user:
+            # User exists, log them in
+            current_app.logger.info(f"Existing {user_type} found, logging in: {email}")
+            access_token = create_access_token(
+                identity=existing_user.id,
+                additional_claims={"role": user_type}
+            )
+            
+            # Create success URL with token
+            success_url = f"{FRONTEND_URL}{dashboard_route}?github_auth=success&token={access_token}&user_id={existing_user.id}&user_type={user_type}"
+            return redirect(success_url)
+        
+        else:
+            # Create new user
+            current_app.logger.info(f"Creating new {user_type} account for: {email}")
+            if user_type == 'mentor':
+                new_user = Mentor(
+                    email=email,
+                    password=generate_password_hash(secrets.token_urlsafe(32)),  # Random password
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone="000-000-0000",  # Placeholder
+                    city="Not specified",  # Placeholder
+                    what_state="Not specified",  # Placeholder
+                    country="United States of America (USA)",  # Default
+                    is_verified=True,  # Auto-verify GitHub users
+                    verification_code=None
+                )
+            else:
+                new_user = Customer(
+                    email=email,
+                    password=generate_password_hash(secrets.token_urlsafe(32)),  # Random password
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone="000-000-0000",  # Placeholder
+                    is_verified=True,  # Auto-verify GitHub users
+                    verification_code=None
+                )
+            
+            db.session.add(new_user)
+            db.session.commit()
+            db.session.refresh(new_user)
+            
+            current_app.logger.info(f"Successfully created {user_type} account with ID: {new_user.id}")
+            
+            # Create access token for new user
+            access_token = create_access_token(
+                identity=new_user.id,
+                additional_claims={"role": user_type}
+            )
+            
+            # Create success URL with token and new user flag
+            success_url = f"{FRONTEND_URL}{dashboard_route}?github_auth=success&new_user=true&token={access_token}&user_id={new_user.id}&user_type={user_type}"
+            return redirect(success_url)
+    
     except requests.exceptions.RequestException as e:
-        current_app.logger.error(f"Calendly token exchange request failed: {e}")
-        if hasattr(e, 'response') and e.response is not None:
-            current_app.logger.error(f"Calendly error response: {e.response.text}")
-        return redirect(f"{FRONTEND_PROFILE_URL}?calendly_error=network_error", code=302)
+        current_app.logger.error(f"HTTP request error during GitHub OAuth: {str(e)}")
+        return redirect(f"{FRONTEND_URL}/?auth_error=network_error")
     except Exception as e:
-        current_app.logger.error(f"Unexpected error processing Calendly callback: {str(e)}")
-        return redirect(f"{FRONTEND_PROFILE_URL}?calendly_error=internal_error", code=302)
-
-
-# Keep your existing test-connection and disconnect endpoints as they are working fine
-@api.route('/calendly/test-connection', methods=['GET'])
-@jwt_required()
-def test_calendly_connection():
-    mentor_id = get_jwt_identity()
-    current_app.logger.info(f"Testing Calendly connection for mentor {mentor_id}")
-    
-    access_token, token_error_msg = get_valid_calendly_access_token(mentor_id)
-    
-    if token_error_msg or not access_token:
-        current_app.logger.warning(f"No valid token for mentor {mentor_id}: {token_error_msg}")
-        return jsonify({"connected": False, "error": token_error_msg or "No valid access token"}), 200
-    
-    try:
-        response = requests.get(
-            'https://api.calendly.com/users/me',
-            headers={'Authorization': f'Bearer {access_token}'},
-            timeout=10
-        )
-        
-        current_app.logger.info(f"Calendly API test response status: {response.status_code}")
-        
-        if response.status_code == 200:
-            user_data = response.json()
-            return jsonify({
-                "connected": True,
-                "user_name": user_data.get('resource', {}).get('name'),
-                "user_email": user_data.get('resource', {}).get('email')
-            }), 200
-        else:
-            current_app.logger.error(f"Calendly API test failed: {response.status_code} - {response.text}")
-            return jsonify({"connected": False, "error": f"Token validation failed: {response.status_code}"}), 200
-            
-    except Exception as e:
-        current_app.logger.error(f"Unexpected error in test_calendly_connection: {str(e)}")
-        return jsonify({"connected": False, "error": f"Internal error: {str(e)}"}), 500
-
-
-@api.route('/calendly/disconnect', methods=['POST'])
-@jwt_required()
-def disconnect_calendly():
-    mentor_id = get_jwt_identity()
-    mentor = Mentor.query.get(mentor_id)
-    
-    if not mentor:
-        return jsonify({"msg": "Mentor not found"}), 404
-    
-    # Clear tokens
-    mentor.calendly_access_token = None
-    mentor.calendly_refresh_token = None
-    mentor.calendly_token_expires_at = None
-    
-    db.session.commit()
-    
-    return jsonify({"msg": "Calendly disconnected successfully"}), 200
-
-
-def get_valid_calendly_access_token(mentor_id):
-    mentor = Mentor.query.get(mentor_id)
-    if not mentor:
-        current_app.logger.error(f"[Calendly Token Helper] Mentor not found: {mentor_id}")
-        return None, "Mentor not found"
-
-    if not mentor.calendly_refresh_token:
-        current_app.logger.warning(f"[Calendly Token Helper] Mentor {mentor_id} has not connected Calendly")
-        return None, "Mentor has not connected their Calendly account."
-
-    # Check if current access token is valid
-    if mentor.calendly_access_token and mentor.calendly_token_expires_at:
-        # Simple fix: convert both datetimes to naive for comparison
-        now = datetime.utcnow()
-        expires_at = mentor.calendly_token_expires_at
-        
-        # If expires_at is timezone-aware, convert to naive UTC
-        if hasattr(expires_at, 'tzinfo') and expires_at.tzinfo is not None:
-            expires_at = expires_at.replace(tzinfo=None)
-            
-        # Compare naive datetimes
-        if now < (expires_at - timedelta(minutes=5)):
-            current_app.logger.info(f"[Calendly Token Helper] Using existing valid access token for mentor {mentor_id}")
-            return mentor.calendly_access_token, None
-
-    # Refresh token logic (same as before)
-    current_app.logger.info(f"[Calendly Token Helper] Refreshing Calendly access token for mentor {mentor_id}")
-    CALENDLY_CLIENT_ID = os.getenv("CALENDLY_CLIENT_ID")
-    CALENDLY_CLIENT_SECRET = os.getenv("CALENDLY_CLIENT_SECRET")
-
-    if not CALENDLY_CLIENT_ID or not CALENDLY_CLIENT_SECRET:
-        current_app.logger.error("[Calendly Token Helper] Calendly credentials not configured for refresh")
-        return None, "Calendly integration is not properly configured."
-
-    token_url = "https://auth.calendly.com/oauth/token"
-    payload = {
-        'grant_type': 'refresh_token',
-        'refresh_token': mentor.calendly_refresh_token,
-        'client_id': CALENDLY_CLIENT_ID,
-        'client_secret': CALENDLY_CLIENT_SECRET
-    }
-
-    headers = {
-        'Content-Type': 'application/x-www-form-urlencoded'
-    }
-
-    try:
-        response = requests.post(token_url, data=payload, headers=headers, timeout=30)
-        response.raise_for_status()
-        new_token_data = response.json()
-
-        new_access_token = new_token_data.get('access_token')
-        new_refresh_token = new_token_data.get('refresh_token')
-        new_expires_in = new_token_data.get('expires_in')
-
-        if not new_access_token:
-            current_app.logger.error(f"[Calendly Token Helper] Token refresh missing access_token for mentor {mentor_id}")
-            return None, "Failed to refresh Calendly token (missing token in response)."
-
-        mentor.calendly_access_token = new_access_token
-        if new_refresh_token:
-            mentor.calendly_refresh_token = new_refresh_token
-        if new_expires_in:
-            # Store as naive datetime
-            mentor.calendly_token_expires_at = datetime.utcnow() + timedelta(seconds=int(new_expires_in))
-        
-        db.session.commit()
-        current_app.logger.info(f"[Calendly Token Helper] Successfully refreshed token for mentor {mentor_id}")
-        return new_access_token, None
-    
-    except requests.exceptions.HTTPError as e:
-        current_app.logger.error(f"[Calendly Token Helper] HTTP error during refresh for mentor {mentor_id}: {e}")
-        if hasattr(e, 'response') and e.response is not None:
-            current_app.logger.error(f"[Calendly Token Helper] Error response: {e.response.status_code} - {e.response.text}")
-            if e.response.status_code in [400, 401]:
-                # Clear invalid tokens
-                mentor.calendly_access_token = None
-                mentor.calendly_refresh_token = None
-                mentor.calendly_token_expires_at = None
-                db.session.commit()
-                return None, "Calendly connection expired. Please reconnect your account."
-        return None, "Failed to refresh Calendly token due to server error."
-    except Exception as e:
-        current_app.logger.error(f"[Calendly Token Helper] Unexpected error during refresh for mentor {mentor_id}: {str(e)}")
-        return None, "An unexpected error occurred while refreshing Calendly token."
-    
-# Add this route to your routes.py
-@api.route('/bookings/<int:booking_id>/calendly-details', methods=['PUT'])
-@jwt_required()
-def update_booking_calendly_details(booking_id):
-    """Update a booking with Calendly event details after final scheduling"""
-    current_customer_id = get_jwt_identity()
-    
-    # Get the booking and verify ownership
-    booking = Booking.query.get(booking_id)
-    if not booking:
-        return jsonify({"msg": "Booking not found"}), 404
-    
-    if booking.customer_id != current_customer_id:
-        return jsonify({"msg": "Unauthorized - not your booking"}), 403
-    
-    data = request.get_json()
-    calendly_event_uri = data.get('calendly_event_uri')
-    calendly_invitee_uri = data.get('calendly_invitee_uri')
-    calendly_event_start_time_str = data.get('calendly_event_start_time')
-    calendly_event_end_time_str = data.get('calendly_event_end_time')
-    invitee_name = data.get('invitee_name')
-    invitee_email = data.get('invitee_email')
-    invitee_notes = data.get('invitee_notes')
-    
-    if not calendly_event_uri:
-        return jsonify({"msg": "Missing required Calendly event URI"}), 400
-    
-    try:
-        # Update the booking with Calendly details
-        booking.calendly_event_uri = calendly_event_uri
-        if calendly_invitee_uri:
-            booking.calendly_invitee_uri = calendly_invitee_uri
-        if calendly_event_start_time_str:
-            booking.calendly_event_start_time = dt.fromisoformat(calendly_event_start_time_str.replace('Z', '+00:00'))
-        if calendly_event_end_time_str:
-            booking.calendly_event_end_time = dt.fromisoformat(calendly_event_end_time_str.replace('Z', '+00:00'))
-        if invitee_name:
-            booking.invitee_name = invitee_name
-        if invitee_email:
-            booking.invitee_email = invitee_email
-        if invitee_notes:
-            booking.invitee_notes = invitee_notes
-
-        # Update status to confirmed since Calendly event is now scheduled
-        booking.status = BookingStatus.CONFIRMED
-        booking.scheduled_at = datetime.utcnow()
-        
-        db.session.commit()
-        
-        current_app.logger.info(f"Successfully updated booking {booking_id} with Calendly details")
-        
-        return jsonify({
-            "success": True,
-            "message": "Booking updated with Calendly details",
-            "booking": booking.serialize()
-        }), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error updating booking {booking_id} with Calendly details: {str(e)}")
-        return jsonify({"msg": "Failed to update booking"}), 500
-
-@api.route('/bookings/<int:booking_id>', methods=['GET'])
-@jwt_required()
-def get_booking_by_id(booking_id):
-    """Get a specific booking by ID"""
-    current_customer_id = get_jwt_identity()
-    
-    # Get the booking and verify it exists
-    booking = Booking.query.get(booking_id)
-    if not booking:
-        return jsonify({"msg": "Booking not found"}), 404
-    
-    # Verify ownership - customer can only see their own bookings
-    if booking.customer_id != current_customer_id:
-        return jsonify({"msg": "Unauthorized - not your booking"}), 403
-    
-    try:
-        return jsonify({
-            "success": True,
-            "booking": booking.serialize()
-        }), 200
-        
-    except Exception as e:
-        current_app.logger.error(f"Error retrieving booking {booking_id}: {str(e)}")
-        return jsonify({"msg": "Failed to retrieve booking"}), 500
-
-@api.route('/booking/calendly-sync', methods=['POST'])
-@jwt_required()
-def sync_booking_with_calendly_details():
-    current_customer_id = get_jwt_identity()
-    data = request.get_json()
-
-    booking_id = data.get('bookingId')
-    calendly_event_uri = data.get('calendlyEventUri') # We might not strictly need this if invitee URI is enough
-    calendly_invitee_uri = data.get('calendlyInviteeUri')
-    mentor_id = data.get('mentorId')
-
-    if not all([booking_id, calendly_invitee_uri, mentor_id]):
-        return jsonify({"success": False, "message": "Missing bookingId, invitee URI, or mentorId"}), 400
-
-    booking = Booking.query.get(booking_id)
-    if not booking:
-        return jsonify({"success": False, "message": "Booking not found"}), 404
-    if booking.customer_id != current_customer_id:
-        return jsonify({"success": False, "message": "Unauthorized - not your booking"}), 403
-
-    mentor = Mentor.query.get(mentor_id)
-    if not mentor:
-        return jsonify({"success": False, "message": "Mentor not found for Calendly token retrieval"}), 404
-
-    access_token, token_error_msg = get_valid_calendly_access_token(mentor_id)
-    if token_error_msg or not access_token:
-        current_app.logger.warning(f"No valid Calendly token for mentor {mentor_id} during sync: {token_error_msg}")
-        return jsonify({"success": False, "message": token_error_msg or "Could not get Calendly token for mentor."}), 401 # Or 503
-
-    try:
-        headers = {'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
-        # Fetch details from the Invitee URI - this usually has all the needed data including event times
-        # Example: GET https://api.calendly.com/scheduled_events/{event_uuid}/invitees/{invitee_uuid}
-        current_app.logger.info(f"Fetching Calendly invitee details from: {calendly_invitee_uri}")
-        invitee_response = requests.get(calendly_invitee_uri, headers=headers, timeout=15)
-        invitee_response.raise_for_status() # Will raise HTTPError for bad responses (4xx or 5xx)
-        
-        invitee_data = invitee_response.json().get('resource', {})
-        # current_app.logger.info(f"Calendly invitee_data received: {json.dumps(invitee_data, indent=2)}") # Verbose
-
-        # Extract data - paths might need adjustment based on actual Calendly API response
-        booking.calendly_event_uri = invitee_data.get('event', calendly_event_uri) # Fallback to original if not in invitee payload
-        booking.calendly_invitee_uri = invitee_data.get('uri', calendly_invitee_uri) # Usually this is the same
-        
-        event_details_source = invitee_data # Default to invitee data
-
-        # Try to get start_time and end_time
-        start_time_str = event_details_source.get('start_time')
-        end_time_str = event_details_source.get('end_time')
-
-        # If 'scheduled_event' object exists within invitee_data and contains times, prioritize it
-        if 'scheduled_event' in invitee_data and isinstance(invitee_data['scheduled_event'], dict):
-            current_app.logger.info("Found 'scheduled_event' in invitee_data.")
-            potential_event_source = invitee_data['scheduled_event']
-            if potential_event_source.get('start_time') and potential_event_source.get('end_time'):
-                current_app.logger.info("Using 'scheduled_event' from invitee_data for event times.")
-                event_details_source = potential_event_source
-                start_time_str = event_details_source.get('start_time')
-                end_time_str = event_details_source.get('end_time')
-
-        # If times are still missing and we have a valid event URI, fetch the full event details
-        if not (start_time_str and end_time_str) and booking.calendly_event_uri:
-            current_app.logger.info(f"Event times not found in invitee data or nested 'scheduled_event'. Fetching full event details from: {booking.calendly_event_uri}")
-            try:
-                event_response = requests.get(booking.calendly_event_uri, headers=headers, timeout=15)
-                event_response.raise_for_status()
-                event_full_details = event_response.json().get('resource', {})
-                # current_app.logger.info(f"Calendly full event_details received: {json.dumps(event_full_details, indent=2)}") # Verbose
-                # Use these details as the primary source if they contain times
-                if event_full_details.get('start_time') and event_full_details.get('end_time'):
-                    event_details_source = event_full_details
-                    start_time_str = event_details_source.get('start_time')
-                    end_time_str = event_details_source.get('end_time')
-                else:
-                    current_app.logger.warning("Full event details fetched but still missing start_time or end_time.")
-            except requests.exceptions.HTTPError as e_event:
-                current_app.logger.error(f"Calendly API HTTPError fetching event details for {booking.calendly_event_uri}: {e_event.response.text if e_event.response else str(e_event)}")
-                # Continue without failing, times will remain null if not found
-            except Exception as e_event_generic:
-                current_app.logger.error(f"Generic error fetching event details for {booking.calendly_event_uri}: {str(e_event_generic)}")
-        elif not (start_time_str and end_time_str):
-            current_app.logger.warning("Could not determine source for event times (no start/end time in invitee_data and no event_uri to fetch). Times will remain null.")
-        else:
-            current_app.logger.info(f"Event times found directly in invitee data or its 'scheduled_event' object: Start: {start_time_str}, End: {end_time_str}")
-
-
-        # If start_time/end_time are directly on the invitee's scheduled_event object (common)
-        if invitee_data.get('scheduled_event') and isinstance(invitee_data['scheduled_event'], dict):
-             event_payload_source = invitee_data['scheduled_event']
-        else: # Fallback to top-level fields if they exist or use what we got from initial webhook
-             event_payload_source = invitee_data
-
-        start_time_str = event_details_source.get('start_time')
-        end_time_str = event_details_source.get('end_time')
-
-        if start_time_str:
-            booking.calendly_event_start_time = dt.fromisoformat(start_time_str.replace('Z', '+00:00'))
-        if end_time_str:
-            booking.calendly_event_end_time = dt.fromisoformat(end_time_str.replace('Z', '+00:00'))
-        
-        booking.invitee_name = invitee_data.get('name', booking.invitee_name) # Keep existing if not found
-        booking.invitee_email = invitee_data.get('email', booking.invitee_email)
-        
-        questions_and_answers = invitee_data.get('questions_and_answers', [])
-        if questions_and_answers:
-            notes_answer = next((qa.get('answer') for qa in questions_and_answers if qa.get('question','').lower().strip() in [
-                "notes or special requests?", 
-                "please share anything that will help prepare for our meeting.",
-                "notes",
-                # Add more common note questions here from your Calendly setup
-            ]), None)
-            if notes_answer:
-                booking.invitee_notes = notes_answer
-            elif not booking.invitee_notes and questions_and_answers: # If no specific note, but other Q&A exist, take the first answer as a generic note
-                booking.invitee_notes = questions_and_answers[0].get('answer')
-
-        booking.status = BookingStatus.CONFIRMED
-        booking.scheduled_at = datetime.utcnow()
-        
-        db.session.commit()
-        current_app.logger.info(f"Booking {booking_id} successfully synced with detailed Calendly info.")
-        return jsonify({"success": True, "message": "Booking synced with Calendly details.", "booking": booking.serialize()}), 200
-
-    except requests.exceptions.HTTPError as e:
-        current_app.logger.error(f"Calendly API HTTPError during sync for booking {booking_id}: {e.response.text if e.response else str(e)}")
-        error_detail = "Could not fetch details from Calendly."
-        if e.response is not None:
-            try: error_detail = e.response.json().get("message", error_detail)
-            except: pass # Keep generic if parsing fails
-        return jsonify({"success": False, "message": f"Calendly API error: {error_detail}"}), e.response.status_code if e.response is not None else 502
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error syncing Calendly details for booking {booking_id}: {str(e)}")
+        current_app.logger.error(f"Unexpected error during GitHub OAuth: {str(e)}")
         import traceback
         current_app.logger.error(traceback.format_exc())
-        return jsonify({"success": False, "message": "Internal server error during Calendly sync."}), 500
+        return redirect(f"{FRONTEND_URL}/?auth_error=server_error")
 
-@api.route('/finalize-booking', methods=['POST'])
-@jwt_required() # Customer must be logged in to finalize a booking
-def finalize_booking():
+@api.route('/auth/github/verify', methods=['POST'])
+def verify_github_auth():
+    """Verify GitHub auth token and log user in"""
     data = request.get_json()
-    current_customer_id = get_jwt_identity()
-    customer = Customer.query.get(current_customer_id)
-
-    if not customer:
-        return jsonify({"msg": "Customer not found"}), 404
-
-    # --- Expected data from frontend (BookingDetailsForm.js) --- 
-    mentor_id = data.get('mentorId')
-    calendly_selected_event_uri = data.get('calendlyScheduledEventUri') 
+    token = data.get('token')
+    user_id = data.get('user_id')
+    user_type = data.get('user_type')
     
-    event_start_time_str = data.get('eventStartTime') 
-    event_end_time_str = data.get('eventEndTime') 
+    if not all([token, user_id, user_type]):
+        return jsonify({"error": "Missing required parameters"}), 400
     
-    invitee_name = data.get('inviteeName')
-    invitee_email = data.get('inviteeEmail')
-    invitee_notes = data.get('notes', '')
+    try:
+        # Verify the token (reusing the same JWT verification as Google)
+        decoded_token = jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+        token_user_id = decoded_token.get('sub')
+        token_role = decoded_token.get('role')
+        
+        if str(token_user_id) != str(user_id) or token_role != user_type:
+            return jsonify({"error": "Invalid token"}), 401
+        
+        # Get user data
+        if user_type == 'mentor':
+            user = Mentor.query.get(user_id)
+        else:
+            user = Customer.query.get(user_id)
+        
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        
+        current_app.logger.info(f"Successfully verified GitHub auth for {user_type}: {user.email}")
+        
+        return jsonify({
+            "success": True,
+            "access_token": token,
+            f"{user_type}_id": user.id,
+            f"{user_type}_data": user.serialize(),
+            "role": user_type
+        }), 200
+        
+    except jwt.InvalidTokenError:
+        return jsonify({"error": "Invalid token"}), 401
+    except Exception as e:
+        current_app.logger.error(f"GitHub token verification error: {str(e)}")
+        return jsonify({"error": "Server error"}), 500
+
+# MVP GOOGLE AND GITHUB SIGNUP AND LOGIN 
+# MVP GOOGLE AND GITHUB SIGNUP AND LOGIN 
+# MVP GOOGLE AND GITHUB SIGNUP AND LOGIN 
+# MVP GOOGLE AND GITHUB SIGNUP AND LOGIN 
+
+@api.route('/auth/mvp/google/initiate', methods=['POST'])
+def mvp_google_oauth_initiate():
+    """Initiate Google OAuth flow for MVP booking"""
+    data = request.get_json()
+    mentor_id = data.get('mentor_id')
     
-    stripe_payment_intent_id = data.get('paymentIntentId')
-    amount_paid = data.get('amountPaid') 
-    currency = data.get('currency', 'usd')
+    if not mentor_id:
+        return jsonify({"error": "Mentor ID is required"}), 400
+    
+    # Create signed state parameter with mentor_id for MVP flow
+    state_data = {
+        'user_type': 'customer',
+        'flow_type': 'mvp_booking',
+        'mentor_id': mentor_id,
+        'timestamp': int(time.time()),
+        'nonce': secrets.token_urlsafe(16)
+    }
+    
+    state = create_mvp_signed_state(state_data)
+    
+    # Google OAuth URL
+    google_auth_url = "https://accounts.google.com/o/oauth2/auth"
+    params = {
+        'client_id': GOOGLE_CLIENT_ID,
+        'redirect_uri': f"{os.getenv('BACKEND_URL')}/api/auth/mvp/google/callback",
+        'scope': 'openid email profile',
+        'response_type': 'code',
+        'state': state,
+        'access_type': 'offline',
+        'prompt': 'consent'
+    }
 
-    # --- UPDATED Basic Validation (removed calendly_selected_event_uri requirement) --- 
-    if not all([mentor_id, event_start_time_str, invitee_name, invitee_email, stripe_payment_intent_id]):
-        current_app.logger.error(f"Missing required data: mentorId={mentor_id}, eventStartTime={event_start_time_str}, inviteeName={invitee_name}, inviteeEmail={invitee_email}, paymentIntentId={stripe_payment_intent_id}")
-        return jsonify({"msg": "Missing required booking information."}), 400
+      # ADD THIS DEBUG LINE:
+    current_app.logger.info(f"MVP Google redirect URI being sent: {params['redirect_uri']}")
+    current_app.logger.info(f"MVP Google client ID being used: {GOOGLE_CLIENT_ID}")
+    
+    auth_url = f"{google_auth_url}?{urlencode(params)}"
+    current_app.logger.info(f"Generated MVP Google OAuth URL for mentor {mentor_id}")
+    return jsonify({"auth_url": auth_url}), 200
 
-    mentor = Mentor.query.get(mentor_id)
-    if not mentor:
-        return jsonify({"msg": "Selected mentor not found."}), 404
-
-    # Convert string dates to datetime objects early for use in email and booking
-    parsed_event_start_time = dt.fromisoformat(event_start_time_str.replace('Z', '+00:00')) if event_start_time_str else None
-    parsed_event_end_time = dt.fromisoformat(event_end_time_str.replace('Z', '+00:00')) if event_end_time_str else None
-
-    # --- Handle case where Calendly URI is null --- 
-    if not calendly_selected_event_uri:
-        current_app.logger.warning(f"No Calendly event URI provided - creating booking without Calendly integration for mentor {mentor_id}")
+@api.route('/auth/mvp/google/callback', methods=['GET'])
+def mvp_google_oauth_callback():
+    """Handle Google OAuth callback for MVP booking"""
+    code = request.args.get('code')
+    state = request.args.get('state')
+    error = request.args.get('error')
+    
+    if error:
+        current_app.logger.error(f"MVP Google OAuth error: {error}")
+        return redirect(f"{FRONTEND_URL}/mentor-details/1?mvp_auth_error=oauth_denied")
+    
+    if not code or not state:
+        current_app.logger.error("Missing code or state parameter in MVP Google OAuth")
+        return redirect(f"{FRONTEND_URL}/mentor-details/1?mvp_auth_error=missing_params")
+    
+    # Verify and decode state
+    payload, error_msg = verify_mvp_signed_state(state)
+    if error_msg:
+        current_app.logger.error(f"MVP Google state verification failed: {error_msg}")
+        return redirect(f"{FRONTEND_URL}/mentor-details/1?mvp_auth_error=state_verification_failed")
+    
+    mentor_id = payload['mentor_id']
+    current_app.logger.info(f"Processing MVP Google OAuth callback for mentor {mentor_id}")
+    
+    try:
+        # Exchange code for tokens (same as regular Google OAuth)
+        token_url = "https://oauth2.googleapis.com/token"
+        token_data = {
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': GOOGLE_CLIENT_SECRET,
+            'code': code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': f"{os.getenv('BACKEND_URL')}/api/auth/mvp/google/callback",
+        }
         
-        calculated_amount_paid = Decimal(amount_paid) if amount_paid else Decimal(mentor.price or 0)
-        calculated_platform_fee = calculated_amount_paid * Decimal('0.10') 
-        calculated_mentor_payout = calculated_amount_paid - calculated_platform_fee
-
-        new_booking = Booking(
-            mentor_id=mentor_id,
-            customer_id=current_customer_id,
-            paid_at=datetime.utcnow(),
-            scheduled_at=datetime.utcnow(), 
-            calendly_event_uri=None,
-            calendly_invitee_uri=None,
-            calendly_event_start_time=parsed_event_start_time,
-            calendly_event_end_time=parsed_event_end_time,
-            invitee_name=invitee_name,
-            invitee_email=invitee_email,
-            invitee_notes=invitee_notes,
-            stripe_payment_intent_id=stripe_payment_intent_id,
-            amount_paid=calculated_amount_paid,
-            currency=currency,
-            platform_fee=calculated_platform_fee,
-            mentor_payout_amount=calculated_mentor_payout,
-            status=BookingStatus.PAID 
-        )
+        current_app.logger.info("Exchanging authorization code for access token (MVP)")
+        token_response = requests.post(token_url, data=token_data, timeout=30)
+        token_response.raise_for_status()
+        tokens = token_response.json()
         
-        # --- FIXED: Separate database operations from email sending ---
-        try:
-            db.session.add(new_booking)
-            db.session.commit()
-            current_app.logger.info(f"Booking {new_booking.id} created successfully (manual confirmation required)")
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Error creating manual booking: {str(e)}")
-            return jsonify({"msg": "Failed to create booking"}), 500
-
-        # --- Email sending AFTER successful database commit ---
-        # Only mentor email will be sent in this manual flow
-        mentor_email_sent = False
+        # Get user info from Google
+        user_info_url = f"https://www.googleapis.com/oauth2/v2/userinfo?access_token={tokens['access_token']}"
+        user_response = requests.get(user_info_url, timeout=30)
+        user_response.raise_for_status()
+        google_user = user_response.json()
         
-        # Prepare mentor email
-        mentor_email_subject = f"Action Required: New Mentorship Booking Request from {invitee_name}"
+        current_app.logger.info(f"Retrieved Google user info for MVP: {google_user.get('email', 'unknown')}")
         
-        # Mentor's Google Calendar link
-        mentor_gcal_link = "#"
+        # Extract user data
+        email = google_user.get('email')
+        first_name = google_user.get('given_name', '')
+        last_name = google_user.get('family_name', '')
         
-        # Timezone conversion for mentor email
-        readable_event_time_utc = "Not specified by client system"
-        readable_event_time_et = "Not specified, cannot convert"
-        if parsed_event_start_time:
-            readable_event_time_utc = parsed_event_start_time.strftime('%Y-%m-%d %H:%M %Z')
-            try:
-                eastern_tz = pytz.timezone('America/New_York')
-                time_in_eastern = parsed_event_start_time.astimezone(eastern_tz)
-                readable_event_time_et = time_in_eastern.strftime('%Y-%m-%d %I:%M %p %Z') # e.g., 2025-05-31 03:14 PM EDT
-            except Exception as e:
-                current_app.logger.error(f"Could not convert time to Eastern for mentor email: {e}")
-                readable_event_time_et = "Time conversion error"
-
-            # Default end time to 1 hour after start if not available for mentor link
-            mentor_event_end_time_for_link = parsed_event_end_time if parsed_event_end_time else parsed_event_start_time + timedelta(hours=1)
-            current_app.logger.info(f"[Mentor GCal Link] Raw parsed_event_start_time: {parsed_event_start_time}, Calculated mentor_event_end_time_for_link: {mentor_event_end_time_for_link}")
-            
-            gcal_start_str_mentor = parsed_event_start_time.strftime('%Y%m%dT%H%M%SZ')
-            gcal_end_str_mentor = mentor_event_end_time_for_link.strftime('%Y%m%dT%H%M%SZ')
-            current_app.logger.info(f"[Mentor GCal Link] Formatted gcal_start_str_mentor: {gcal_start_str_mentor}, Formatted gcal_end_str_mentor: {gcal_end_str_mentor}")
-            
-            mentor_gcal_event_text = f"Mentorship: {invitee_name} with {mentor.first_name} {mentor.last_name}"
-            mentor_gcal_event_details = (
-                f"Client: {invitee_name} ({invitee_email}).\n"
-                f"Requested time for mentorship session: {readable_event_time_utc}.\n"
-                f"Example (US Eastern Time): {readable_event_time_et}\n"
-                f"Notes from client: {invitee_notes if invitee_notes else 'None'}.\n\n"
-                f"Please confirm these details, schedule the meeting in your calendar, and ensure an invitation is sent to {invitee_email} from your Google Calendar."
+        if not email:
+            current_app.logger.error("No email received from Google (MVP)")
+            return redirect(f"{FRONTEND_URL}/mentor-details/{mentor_id}?mvp_auth_error=no_email")
+        
+        # Check if customer already exists
+        existing_customer = Customer.query.filter_by(email=email).first()
+        
+        if existing_customer:
+            # Customer exists, log them in
+            current_app.logger.info(f"Existing MVP customer found, logging in: {email}")
+            access_token = create_access_token(
+                identity=existing_customer.id,
+                additional_claims={"role": "customer"}
             )
-            mentor_gcal_location = 'Online / Video Call' 
             
-            mentor_gcal_params = {
-                'action': 'TEMPLATE',
-                'text': mentor_gcal_event_text,
-                'dates': f'{gcal_start_str_mentor}/{gcal_end_str_mentor}',
-                'details': mentor_gcal_event_details,
-                'location': mentor_gcal_location,
-                'add': invitee_email # Add customer as attendee
-            }
-            mentor_gcal_link = f"https://www.google.com/calendar/render?{urlencode(mentor_gcal_params)}"
-            current_app.logger.info(f"[Mentor GCal Link] Generated Google Calendar Link: {mentor_gcal_link}")
-
-        mentor_email_body = f"""
-        <div style='font-family: Arial, sans-serif; color: #333;'>
-            <h2>Action Required: New Mentorship Booking Request</h2>
-            <p>Hi {mentor.first_name},</p>
-            <p>You have received a new mentorship booking request that requires your manual attention and calendar scheduling:</p>
-            <p><strong>Client Name:</strong> {invitee_name}</p>
-            <p><strong>Client Email:</strong> {invitee_email}</p>
-            <p><strong>Requested Time (UTC):</strong> {readable_event_time_utc}</p>
-            <p><strong>Example (US Eastern Time):</strong> {readable_event_time_et}</p>
-            <p><strong>Client Notes:</strong> {invitee_notes if invitee_notes else 'None'}</p>
-            <p>Since the Calendly link was not used for this booking, please schedule this session manually.</p>"""
+            # Redirect back to mentor-details page with success
+            success_url = f"{FRONTEND_URL}/mentor-details/{mentor_id}?mvp_google_auth=success&token={access_token}&user_id={existing_customer.id}&user_type=customer"
+            return redirect(success_url)
         
-        if mentor_gcal_link != "#":
-            mentor_email_body += f"""
-            <p>To help you schedule this, you can use the link below to create a Google Calendar event. It will be pre-filled with the client's details and requested time. Please review, adjust the time if necessary, and then <strong>save the event in your Google Calendar to send the official calendar invitation to {invitee_email}</strong>.</p>
-            <div style="text-align: center; margin: 20px 0;">
-                <a href="{mentor_gcal_link}" target="_blank" 
-                   style="background-color: #007bff; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-size: 16px; display: inline-block;">
-                    Schedule in Google Calendar
-                </a>
-            </div>"""
         else:
-            mentor_email_body += "<p>Please schedule this meeting manually in your calendar and send an invitation to the client.</p>"
-
-        mentor_email_body += f"""
-            <p>Thank you,<br>The devMentor Team</p>
-        </div>
-        """
-
-        # Send mentor email - Enhanced debugging
-        current_app.logger.info(f"=== MENTOR EMAIL DEBUG START (Manual Booking) ===")
-        current_app.logger.info(f"Mentor object: {mentor}")
-        current_app.logger.info(f"Mentor ID: {mentor.id if mentor else 'None'}")
-        current_app.logger.info(f"Mentor email: '{mentor.email}' (type: {type(mentor.email)})")
-        current_app.logger.info(f"Mentor first_name: '{mentor.first_name}'")
-        current_app.logger.info(f"Mentor email subject: '{mentor_email_subject}'")
-        current_app.logger.info(f"Mentor email body length: {len(mentor_email_body)} characters")
-        
-        if not mentor.email:
-            current_app.logger.error("MENTOR EMAIL IS MISSING OR EMPTY!")
-            mentor_email_sent = False
-        elif not mentor_email_subject:
-            current_app.logger.error("MENTOR EMAIL SUBJECT IS MISSING!")
-            mentor_email_sent = False  
-        elif not mentor_email_body:
-            current_app.logger.error("MENTOR EMAIL BODY IS MISSING!")
-            mentor_email_sent = False
-        else:
-            try:
-                current_app.logger.info(f"Attempting to send mentor email to: {mentor.email}")
-                send_booking_confirmation_email(mentor.email, mentor_email_subject, mentor_email_body)
-                mentor_email_sent = True
-                current_app.logger.info(f"✅ Mentor notification email sent successfully to {mentor.email}")
-            except Exception as e:
-                current_app.logger.error(f"❌ Failed to send mentor notification email to {mentor.email}: {str(e)}")
-                current_app.logger.error(f"Exception type: {type(e).__name__}")
-                import traceback
-                current_app.logger.error(f"Full traceback: {traceback.format_exc()}")
-                mentor_email_sent = False
-        
-        current_app.logger.info(f"=== MENTOR EMAIL DEBUG END (Manual Booking) ===")
-        current_app.logger.info(f"Final mentor_email_sent status: {mentor_email_sent}")
-
-        # Return success response with updated message and email status
-        return jsonify({
-            "success": True, 
-            "message": "Your booking request has been sent to the mentor. They will contact you with a calendar invitation shortly.",
-            "bookingDetails": new_booking.serialize(),
-            "requires_manual_confirmation": True, # This flag is still relevant
-            "email_status": {
-                "customer_notified": False, # Customer is NOT notified by the system
-                "mentor_notified": mentor_email_sent
-            }
-        }), 201
-
-    # --- Original Calendly integration code (when URI is provided) --- 
-    access_token, token_error_msg = get_valid_calendly_access_token(mentor_id)
-    if token_error_msg or not access_token:
-        current_app.logger.error(f"Failed to get Calendly token for mentor {mentor_id} during booking: {token_error_msg}")
-        return jsonify({"msg": token_error_msg or "Could not authenticate with Calendly for this mentor."}), 503
-
-    try:
-        event_uuid = calendly_selected_event_uri.split("/")[-1]
-    except Exception:
-        return jsonify({"msg": "Invalid Calendly event URI format."}), 400
-
-    create_invitee_url = f"https://api.calendly.com/scheduled_events/{event_uuid}/invitees"
-
-    invitee_payload = {
-        "email": invitee_email,
-        "name": invitee_name,
-    }
-    if invitee_notes:
-        invitee_payload["questions_and_answers"] = [
-            {
-                "question": "Notes or special requests?",
-                "answer": invitee_notes
-            }
-        ]
-
-    headers = {
-        'Authorization': f'Bearer {access_token}',
-        'Content-Type': 'application/json'
-    }
-
-    try:
-        current_app.logger.info(f"Attempting to create Calendly invitee for event {event_uuid} for {invitee_email}")
-        calendly_response = requests.post(create_invitee_url, headers=headers, json=invitee_payload)
-        
-        current_app.logger.debug(f"Calendly request to {create_invitee_url} with payload: {invitee_payload}")
-        current_app.logger.debug(f"Calendly response: {calendly_response.status_code} - {calendly_response.text}")
-
-        calendly_response.raise_for_status()
-        calendly_invitee_data = calendly_response.json().get('resource', {})
-        
-        confirmed_calendly_event_uri = calendly_invitee_data.get('scheduled_event', {}).get('uri')
-        confirmed_calendly_invitee_uri = calendly_invitee_data.get('uri')
-
-        calculated_amount_paid = Decimal(amount_paid) if amount_paid else Decimal(mentor.price or 0)
-        calculated_platform_fee = calculated_amount_paid * Decimal('0.10') 
-        calculated_mentor_payout = calculated_amount_paid - calculated_platform_fee
-
-        new_booking = Booking(
-            mentor_id=mentor_id,
-            customer_id=current_customer_id,
-            paid_at=datetime.utcnow(),
-            scheduled_at=datetime.utcnow(), 
-            calendly_event_uri=confirmed_calendly_event_uri or calendly_selected_event_uri,
-            calendly_invitee_uri=confirmed_calendly_invitee_uri,
-            calendly_event_start_time=parsed_event_start_time,
-            calendly_event_end_time=parsed_event_end_time,
-            invitee_name=invitee_name,
-            invitee_email=invitee_email,
-            invitee_notes=invitee_notes,
-            stripe_payment_intent_id=stripe_payment_intent_id,
-            amount_paid=calculated_amount_paid,
-            currency=currency,
-            platform_fee=calculated_platform_fee,
-            mentor_payout_amount=calculated_mentor_payout,
-            status=BookingStatus.CONFIRMED
-        )
-
-        # --- FIXED: Separate database operations from email sending ---
-        try:
-            db.session.add(new_booking)
+            # Create new customer
+            current_app.logger.info(f"Creating new MVP customer account for: {email}")
+            new_customer = Customer(
+                email=email,
+                password=generate_password_hash(secrets.token_urlsafe(32)),  # Random password
+                first_name=first_name or 'User',
+                last_name=last_name or 'Google',
+                phone="000-000-0000",  # Placeholder
+                is_verified=True,  # Auto-verify Google users
+                verification_code=None
+            )
+            
+            db.session.add(new_customer)
             db.session.commit()
-            current_app.logger.info(f"Booking {new_booking.id} created successfully with Calendly integration")
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Error creating Calendly booking: {str(e)}")
-            return jsonify({"msg": "Failed to create booking"}), 500
+            db.session.refresh(new_customer)
+            
+            current_app.logger.info(f"Successfully created MVP customer account with ID: {new_customer.id}")
+            
+            # Create access token for new customer
+            access_token = create_access_token(
+                identity=new_customer.id,
+                additional_claims={"role": "customer"}
+            )
+            
+            # Redirect back to mentor-details page with success and new user flag
+            success_url = f"{FRONTEND_URL}/mentor-details/{mentor_id}?mvp_google_auth=success&new_user=true&token={access_token}&user_id={new_customer.id}&user_type=customer"
+            return redirect(success_url)
+    
+    except requests.exceptions.RequestException as e:
+        current_app.logger.error(f"HTTP request error during MVP Google OAuth: {str(e)}")
+        return redirect(f"{FRONTEND_URL}/mentor-details/{mentor_id}?mvp_auth_error=network_error")
+    except Exception as e:
+        current_app.logger.error(f"Unexpected error during MVP Google OAuth: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        return redirect(f"{FRONTEND_URL}/mentor-details/{mentor_id}?mvp_auth_error=server_error")
 
-        # --- Email sending AFTER successful database commit ---
-        customer_email_sent = False
-        mentor_email_sent = False
+GITHUB_CLIENT_ID_MVP = os.getenv('GITHUB_CLIENT_ID_MVP')
+GITHUB_CLIENT_SECRET_MVP = os.getenv('GITHUB_CLIENT_MVP_SECRET')
 
-        # Prepare customer email
-        email_subject = f"Your Mentorship Session with {mentor.first_name} {mentor.last_name} is Confirmed!"
-        email_body_html = f"""
-        <h1>Session Confirmed!</h1>
-        <p>Hi {invitee_name},</p>
-        <p>Your mentorship session with <strong>{mentor.first_name} {mentor.last_name}</strong> has been successfully scheduled via Calendly.</p>
-        <p><strong>Date & Time:</strong> {parsed_event_start_time.strftime('%A, %B %d, %Y at %I:%M %p %Z') if parsed_event_start_time else 'N/A'}</p>
-        <p><strong>Mentor:</strong> {mentor.first_name} {mentor.last_name}</p>
-        <p><strong>Your Email:</strong> {invitee_email}</p>
-        {f"<p><strong>Notes:</strong> {invitee_notes}</p>" if invitee_notes else ""}
-        <p>You should also receive a confirmation directly from Calendly with options to add this to your calendar. We've attached an iCalendar (.ics) file to this email as well for your convenience.</p>
-        <p>We look forward to your session!</p>
-        """
+@api.route('/auth/mvp/github/initiate', methods=['POST'])
+def mvp_github_oauth_initiate():
+    """Initiate GitHub OAuth flow for MVP booking"""
+    data = request.get_json()
+    mentor_id = data.get('mentor_id')
+    
+    if not mentor_id:
+        return jsonify({"error": "Mentor ID is required"}), 400
+    
+    # Create signed state parameter with mentor_id for MVP flow
+    state_data = {
+        'user_type': 'customer',
+        'flow_type': 'mvp_booking',
+        'mentor_id': mentor_id,
+        'timestamp': int(time.time()),
+        'nonce': secrets.token_urlsafe(16)
+    }
+    
+    state = create_mvp_signed_state(state_data)
+    
+    # GitHub OAuth URL
+    github_auth_url = "https://github.com/login/oauth/authorize"
+    params = {
+        'client_id': GITHUB_CLIENT_ID_MVP,  # ✅ CHANGED: Use MVP client ID
+        'redirect_uri': f"{os.getenv('BACKEND_URL')}/api/auth/mvp/github/callback",
+        'scope': 'user:email',
+        'state': state,
+        'allow_signup': 'true'
+    }
+    
+    auth_url = f"{github_auth_url}?{urlencode(params)}"
+    current_app.logger.info(f"Generated MVP GitHub OAuth URL for mentor {mentor_id}")
+    return jsonify({"auth_url": auth_url}), 200
+
+@api.route('/auth/mvp/github/callback', methods=['GET'])
+def mvp_github_oauth_callback():
+    """Handle GitHub OAuth callback for MVP booking"""
+    code = request.args.get('code')
+    state = request.args.get('state')
+    error = request.args.get('error')
+    error_description = request.args.get('error_description')
+    
+    if error:
+        current_app.logger.error(f"MVP GitHub OAuth error: {error} - {error_description}")
+        return redirect(f"{FRONTEND_URL}/mentor-details/1?mvp_auth_error=oauth_denied")
+    
+    if not code or not state:
+        current_app.logger.error("Missing code or state parameter from GitHub (MVP)")
+        return redirect(f"{FRONTEND_URL}/mentor-details/1?mvp_auth_error=missing_params")
+    
+    # Verify and decode state
+    payload, error_msg = verify_mvp_signed_state(state)
+    if error_msg:
+        current_app.logger.error(f"MVP GitHub state verification failed: {error_msg}")
+        return redirect(f"{FRONTEND_URL}/mentor-details/1?mvp_auth_error=state_verification_failed")
+    
+    mentor_id = payload['mentor_id']
+    current_app.logger.info(f"Processing MVP GitHub OAuth callback for mentor {mentor_id}")
+    
+    try:
+        # Exchange code for access token
+        token_url = "https://github.com/login/oauth/access_token"
+        token_data = {
+            'client_id': GITHUB_CLIENT_ID_MVP,        # ✅ CHANGED: Use MVP client ID
+            'client_secret': GITHUB_CLIENT_SECRET_MVP, # ✅ CHANGED: Use MVP client secret
+            'code': code,
+        }
         
-        meeting_details_ics = None
-        if parsed_event_start_time and parsed_event_end_time:
-            meeting_details_ics = {
-                'uid': f"{new_booking.id}-{stripe_payment_intent_id}",
-                'dtstamp': datetime.utcnow().strftime('%Y%m%dT%H%M%SZ'),
-                'dtstart': parsed_event_start_time.strftime('%Y%m%dT%H%M%SZ'),
-                'dtend': parsed_event_end_time.strftime('%Y%m%dT%H%M%SZ'),
-                'summary': f"Mentorship: {invitee_name} & {mentor.first_name} {mentor.last_name}",
-                'description': f"Mentorship session. Notes: {invitee_notes if invitee_notes else 'None'}. Calendly Event: {confirmed_calendly_event_uri}",
-                'location': 'Online / Video Call'
-            }
-
-        # Send customer email
-        try:
-            send_booking_confirmation_email(invitee_email, email_subject, email_body_html, meeting_details=meeting_details_ics)
-            customer_email_sent = True
-            current_app.logger.info(f"Customer confirmation email sent to {invitee_email}")
-        except Exception as e:
-            current_app.logger.error(f"Failed to send customer confirmation email: {str(e)}")
-
-        # Prepare and send mentor email
-        mentor_email_subject_confirmed = f"New Confirmed Booking: {invitee_name} for {parsed_event_start_time.strftime('%Y-%m-%d %H:%M') if parsed_event_start_time else 'N/A'}"
-        mentor_email_body_confirmed = f"""
-        <p>Hi {mentor.first_name},</p>
-        <p>A new session has been successfully booked and confirmed via Calendly:</p>
-        <p><strong>Client:</strong> {invitee_name} ({invitee_email})</p>
-        <p><strong>Time:</strong> {parsed_event_start_time.strftime('%A, %B %d, %Y at %I:%M %p %Z') if parsed_event_start_time else 'Not specified'}</p>
-        <p><strong>Notes:</strong> {invitee_notes if invitee_notes else 'None'}</p>
-        <p>This event should already be on your Calendly-connected calendar.</p>
-        """
-
-        # Send mentor email - Enhanced debugging  
-        current_app.logger.info(f"=== MENTOR EMAIL DEBUG START ===")
-        current_app.logger.info(f"Mentor object: {mentor}")
-        current_app.logger.info(f"Mentor ID: {mentor.id if mentor else 'None'}")
-        current_app.logger.info(f"Mentor email: '{mentor.email}' (type: {type(mentor.email)})")
-        current_app.logger.info(f"Mentor first_name: '{mentor.first_name}'")
-        current_app.logger.info(f"Mentor email subject: '{mentor_email_subject_confirmed}'")
-        current_app.logger.info(f"Mentor email body length: {len(mentor_email_body_confirmed)} characters")
+        headers = {
+            'Accept': 'application/json'
+        }
         
-        if not mentor.email:
-            current_app.logger.error("MENTOR EMAIL IS MISSING OR EMPTY!")
-            mentor_email_sent = False
-        elif not mentor_email_subject_confirmed:
-            current_app.logger.error("MENTOR EMAIL SUBJECT IS MISSING!")
-            mentor_email_sent = False  
-        elif not mentor_email_body_confirmed:
-            current_app.logger.error("MENTOR EMAIL BODY IS MISSING!")
-            mentor_email_sent = False
+        current_app.logger.info("Exchanging GitHub authorization code for access token (MVP)")
+        token_response = requests.post(token_url, data=token_data, headers=headers, timeout=30)
+        token_response.raise_for_status()
+        token_data = token_response.json()
+        
+        access_token = token_data.get('access_token')
+        if not access_token:
+            current_app.logger.error("No access token received from GitHub (MVP)")
+            return redirect(f"{FRONTEND_URL}/mentor-details/{mentor_id}?mvp_auth_error=no_token")
+        
+        # Get user info from GitHub
+        user_headers = {
+            'Authorization': f'token {access_token}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+        
+        # Get basic user info
+        user_response = requests.get('https://api.github.com/user', headers=user_headers, timeout=30)
+        user_response.raise_for_status()
+        github_user = user_response.json()
+        
+        # Get user email
+        email_response = requests.get('https://api.github.com/user/emails', headers=user_headers, timeout=30)
+        email_response.raise_for_status()
+        emails = email_response.json()
+        
+        # Find primary email
+        primary_email = None
+        for email_data in emails:
+            if email_data.get('primary', False):
+                primary_email = email_data.get('email')
+                break
+        
+        if not primary_email and emails:
+            primary_email = emails[0].get('email')
+        
+        current_app.logger.info(f"Retrieved GitHub user info for MVP: {primary_email or 'unknown'}")
+        
+        # Extract user data
+        email = primary_email
+        name = github_user.get('name', '')
+        login = github_user.get('login', '')
+        
+        # Parse first and last name
+        if name:
+            name_parts = name.strip().split(' ', 1)
+            first_name = name_parts[0]
+            last_name = name_parts[1] if len(name_parts) > 1 else ''
         else:
-            try:
-                current_app.logger.info(f"Attempting to send mentor email to: {mentor.email}")
-                send_booking_confirmation_email(mentor.email, mentor_email_subject_confirmed, mentor_email_body_confirmed)
-                mentor_email_sent = True
-                current_app.logger.info(f"✅ Mentor notification email sent successfully to {mentor.email}")
-            except Exception as e:
-                current_app.logger.error(f"❌ Failed to send mentor notification email to {mentor.email}: {str(e)}")
-                current_app.logger.error(f"Exception type: {type(e).__name__}")
-                import traceback
-                current_app.logger.error(f"Full traceback: {traceback.format_exc()}")
-                mentor_email_sent = False
+            first_name = login or 'User'
+            last_name = 'GitHub'
         
-        current_app.logger.info(f"=== MENTOR EMAIL DEBUG END ===")
-        current_app.logger.info(f"Final mentor_email_sent status: {mentor_email_sent}")
+        if not email:
+            current_app.logger.error("No email received from GitHub (MVP)")
+            return redirect(f"{FRONTEND_URL}/mentor-details/{mentor_id}?mvp_auth_error=no_email")
+        
+        # Check if customer already exists
+        existing_customer = Customer.query.filter_by(email=email).first()
+        
+        if existing_customer:
+            # Customer exists, log them in
+            current_app.logger.info(f"Existing MVP customer found, logging in: {email}")
+            access_token = create_access_token(
+                identity=existing_customer.id,
+                additional_claims={"role": "customer"}
+            )
+            
+            # Redirect back to mentor-details page with success
+            success_url = f"{FRONTEND_URL}/mentor-details/{mentor_id}?mvp_github_auth=success&token={access_token}&user_id={existing_customer.id}&user_type=customer"
+            return redirect(success_url)
+        
+        else:
+            # Create new customer
+            current_app.logger.info(f"Creating new MVP customer account for: {email}")
+            new_customer = Customer(
+                email=email,
+                password=generate_password_hash(secrets.token_urlsafe(32)),  # Random password
+                first_name=first_name,
+                last_name=last_name,
+                phone="000-000-0000",  # Placeholder
+                is_verified=True,  # Auto-verify GitHub users
+                verification_code=None
+            )
+            
+            db.session.add(new_customer)
+            db.session.commit()
+            db.session.refresh(new_customer)
+            
+            current_app.logger.info(f"Successfully created MVP customer account with ID: {new_customer.id}")
+            
+            # Create access token for new customer
+            access_token = create_access_token(
+                identity=new_customer.id,
+                additional_claims={"role": "customer"}
+            )
+            
+            # Redirect back to mentor-details page with success and new user flag
+            success_url = f"{FRONTEND_URL}/mentor-details/{mentor_id}?mvp_github_auth=success&new_user=true&token={access_token}&user_id={new_customer.id}&user_type=customer"
+            return redirect(success_url)
+    
+    except requests.exceptions.RequestException as e:
+        current_app.logger.error(f"HTTP request error during MVP GitHub OAuth: {str(e)}")
+        return redirect(f"{FRONTEND_URL}/mentor-details/{mentor_id}?mvp_auth_error=network_error")
+    except Exception as e:
+        current_app.logger.error(f"Unexpected error during MVP GitHub OAuth: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        return redirect(f"{FRONTEND_URL}/mentor-details/{mentor_id}?mvp_auth_error=server_error")
 
-        return jsonify({
-            "success": True, 
-            "message": "Booking successfully scheduled with Calendly!", 
-            "bookingDetails": new_booking.serialize(),
-            "email_status": {
-                "customer_notified": customer_email_sent,
-                "mentor_notified": mentor_email_sent
-            }
-        }), 201
+# Helper functions for MVP OAuth state management
+def create_mvp_signed_state(state_data):
+    """Create a signed state parameter for MVP OAuth that doesn't rely on sessions"""
+    import time
+    import hmac
+    import hashlib
+    
+    # Convert to JSON and base64 encode
+    payload_json = json.dumps(state_data)
+    payload_b64 = base64.urlsafe_b64encode(payload_json.encode()).decode()
+    
+    # Create HMAC signature
+    secret_key = os.getenv('FLASK_APP_KEY').encode()
+    signature = hmac.new(secret_key, payload_b64.encode(), hashlib.sha256).hexdigest()
+    
+    # Combine payload and signature
+    return f"{payload_b64}.{signature}"
 
-    except requests.exceptions.HTTPError as e:
-        current_app.logger.error(f"Calendly API error: {e}")
-        error_details = "Unknown Calendly API error."
-        if e.response is not None:
-            error_details = e.response.json()
-        return jsonify({"msg": "Failed to schedule with Calendly due to an API error.", "details": error_details}), 502
+def verify_mvp_signed_state(state_param):
+    """Verify and decode the signed state parameter for MVP OAuth"""
+    import time
+    import hmac
+    import hashlib
+    
+    try:
+        # Split payload and signature
+        payload_b64, signature = state_param.split('.')
+        
+        # Verify signature
+        secret_key = os.getenv('FLASK_APP_KEY').encode()
+        expected_signature = hmac.new(secret_key, payload_b64.encode(), hashlib.sha256).hexdigest()
+        
+        if not hmac.compare_digest(signature, expected_signature):
+            return None, "Invalid signature"
+        
+        # Decode payload
+        payload_json = base64.urlsafe_b64decode(payload_b64.encode()).decode()
+        payload = json.loads(payload_json)
+        
+        # Check timestamp (valid for 10 minutes)
+        current_time = int(time.time())
+        if current_time - payload['timestamp'] > 600:  # 10 minutes
+            return None, "State expired"
+        
+        return payload, None
+        
+    except Exception as e:
+        return None, f"Invalid state format: {str(e)}"
+
+# Calendar System Endpoints
+@api.route('/mentor/availability', methods=['GET'])
+@mentor_required
+def get_mentor_availability():
+    """Get current mentor's availability settings"""
+    mentor_id = get_jwt_identity()
+    availabilities = MentorAvailability.query.filter_by(
+        mentor_id=mentor_id, 
+        is_active=True
+    ).all()
+    
+    settings = CalendarSettings.query.filter_by(mentor_id=mentor_id).first()
+    if not settings:
+        # Create default settings
+        settings = CalendarSettings(mentor_id=mentor_id)
+        db.session.add(settings)
+        db.session.commit()
+    
+    return jsonify({
+        "availabilities": [a.serialize() for a in availabilities],
+        "settings": settings.serialize()
+    }), 200
+
+@api.route('/mentor/availability', methods=['POST'])
+@mentor_required
+def set_mentor_availability():
+    """Set or update mentor's weekly availability"""
+    mentor_id = get_jwt_identity()
+    data = request.get_json()
+    
+    try:
+        # Clear existing availability
+        MentorAvailability.query.filter_by(mentor_id=mentor_id).delete()
+        
+        # Add new availability slots
+        for slot in data.get('availabilities', []):
+            availability = MentorAvailability(
+                mentor_id=mentor_id,
+                day_of_week=slot['day_of_week'],
+                start_time=datetime.strptime(slot['start_time'], '%H:%M').time(),
+                end_time=datetime.strptime(slot['end_time'], '%H:%M').time(),
+                timezone=slot.get('timezone', 'America/Los_Angeles')
+            )
+            db.session.add(availability)
+        
+        # Update settings
+        settings = CalendarSettings.query.filter_by(mentor_id=mentor_id).first()
+        if not settings:
+            settings = CalendarSettings(mentor_id=mentor_id)
+            db.session.add(settings)
+        
+        settings.session_duration = data.get('session_duration', 60)
+        settings.buffer_time = data.get('buffer_time', 15)
+        settings.advance_booking_days = data.get('advance_booking_days', 30)
+        settings.minimum_notice_hours = data.get('minimum_notice_hours', 24)
+        settings.timezone = data.get('timezone', 'America/Los_Angeles')
+        
+        db.session.commit()
+        
+        return jsonify({"message": "Availability updated successfully"}), 200
+    
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Unexpected error finalizing booking: {str(e)}")
-        return jsonify({"msg": "An unexpected server error occurred while finalizing your booking."}), 500
+        current_app.logger.error(f"Error updating availability: {str(e)}")
+        return jsonify({"error": "Failed to update availability"}), 500
 
-# Make sure to import Decimal if using it for precise fee calculations
-from decimal import Decimal
+@api.route('/mentor/unavailability', methods=['POST'])
+@mentor_required
+def add_mentor_unavailability():
+    """Add dates when mentor is unavailable"""
+    mentor_id = get_jwt_identity()
+    data = request.get_json()
+    
+    try:
+        unavailability = MentorUnavailability(
+            mentor_id=mentor_id,
+            start_datetime=datetime.fromisoformat(data['start_datetime'].replace('Z', '+00:00')),
+            end_datetime=datetime.fromisoformat(data['end_datetime'].replace('Z', '+00:00')),
+            reason=data.get('reason', '')
+        )
+        db.session.add(unavailability)
+        db.session.commit()
+        
+        return jsonify({"message": "Unavailability added", "id": unavailability.id}), 201
+    
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error adding unavailability: {str(e)}")
+        return jsonify({"error": "Failed to add unavailability"}), 500
+
+@api.route('/mentor/unavailability/<int:unavail_id>', methods=['DELETE'])
+@mentor_required
+def remove_mentor_unavailability(unavail_id):
+    """Remove a specific unavailability period"""
+    mentor_id = get_jwt_identity()
+    
+    unavailability = MentorUnavailability.query.filter_by(
+        id=unavail_id, 
+        mentor_id=mentor_id
+    ).first()
+    
+    if not unavailability:
+        return jsonify({"error": "Unavailability not found"}), 404
+    
+    db.session.delete(unavailability)
+    db.session.commit()
+    
+    return jsonify({"message": "Unavailability removed"}), 200
+
+@api.route('/mentor/<int:mentor_id>/available-slots', methods=['GET'])
+def get_available_slots(mentor_id):
+    """Get available booking slots for a specific mentor"""
+    try:
+        # Query parameters
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        
+        if not start_date_str or not end_date_str:
+            # Default to next 30 days
+            start_date = datetime.utcnow().date()
+            end_date = start_date + timedelta(days=30)
+        else:
+            start_date = datetime.fromisoformat(start_date_str).date()
+            end_date = datetime.fromisoformat(end_date_str).date()
+        
+        # Get mentor's availability settings
+        availabilities = MentorAvailability.query.filter_by(
+            mentor_id=mentor_id, 
+            is_active=True
+        ).all()
+        
+        settings = CalendarSettings.query.filter_by(mentor_id=mentor_id).first()
+        if not settings:
+            return jsonify({"error": "Mentor has not configured availability"}), 404
+        
+        # Get existing bookings
+        existing_bookings = Booking.query.filter(
+            Booking.mentor_id == mentor_id,
+            Booking.session_start_time >= datetime.combine(start_date, datetime_time.min),
+            Booking.session_end_time <= datetime.combine(end_date + timedelta(days=1), datetime_time.min),
+            Booking.status.in_([BookingStatus.PAID, BookingStatus.CONFIRMED])
+        ).all()
+        
+        # Get unavailability periods
+        unavailabilities = MentorUnavailability.query.filter(
+            MentorUnavailability.mentor_id == mentor_id,
+            MentorUnavailability.start_datetime <= datetime.combine(end_date + timedelta(days=1), datetime_time.min),
+            MentorUnavailability.end_datetime >= datetime.combine(start_date, datetime_time.min)
+        ).all()
+        
+        # Generate available slots
+        available_slots = []
+        current_date = start_date
+        
+        # Get timezone
+        tz = pytz.timezone(settings.timezone)
+        
+        while current_date <= end_date:
+            day_of_week = current_date.weekday()
+            
+            # Get availability for this day
+            day_availabilities = [a for a in availabilities if a.day_of_week == day_of_week]
+            
+            for availability in day_availabilities:
+                # Generate time slots
+                # Create naive datetime first, then localize
+                slot_start_naive = datetime.combine(current_date, availability.start_time)
+                slot_end_naive = datetime.combine(current_date, availability.end_time)
+                
+                # Localize to the mentor's timezone
+                current_time = tz.localize(slot_start_naive)
+                end_time = tz.localize(slot_end_naive)
+                
+                while current_time + timedelta(minutes=settings.session_duration) <= end_time:
+                    slot_end = current_time + timedelta(minutes=settings.session_duration)
+                    
+                    # Check if slot is available
+                    is_available = True
+                    
+                    # Check minimum notice
+                    now_utc = datetime.utcnow()
+                    now_tz = tz.normalize(pytz.utc.localize(now_utc).astimezone(tz))
+                    
+                    if current_time < now_tz + timedelta(hours=settings.minimum_notice_hours):
+                        is_available = False
+                    
+                    # Check against existing bookings
+                    if is_available:
+                        for booking in existing_bookings:
+                            # Convert booking times to timezone-aware for comparison
+                            booking_start = booking.session_start_time
+                            booking_end = booking.session_end_time
+                            
+                            # If booking times are naive, assume they're in UTC
+                            if booking_start.tzinfo is None:
+                                booking_start = pytz.utc.localize(booking_start)
+                            if booking_end.tzinfo is None:
+                                booking_end = pytz.utc.localize(booking_end)
+                            
+                            # Convert to mentor's timezone for comparison
+                            booking_start_tz = booking_start.astimezone(tz)
+                            booking_end_tz = booking_end.astimezone(tz)
+                            
+                            if (current_time < booking_end_tz and slot_end > booking_start_tz):
+                                is_available = False
+                                break
+                    
+                    # Check against unavailabilities
+                    if is_available:
+                        for unavail in unavailabilities:
+                            unavail_start = unavail.start_datetime
+                            unavail_end = unavail.end_datetime
+                            
+                            # If unavailability times are naive, assume they're in UTC
+                            if unavail_start.tzinfo is None:
+                                unavail_start = pytz.utc.localize(unavail_start)
+                            if unavail_end.tzinfo is None:
+                                unavail_end = pytz.utc.localize(unavail_end)
+                            
+                            # Convert to mentor's timezone for comparison
+                            unavail_start_tz = unavail_start.astimezone(tz)
+                            unavail_end_tz = unavail_end.astimezone(tz)
+                            
+                            if (current_time < unavail_end_tz and slot_end > unavail_start_tz):
+                                is_available = False
+                                break
+                    
+                    if is_available:
+                        # Convert to UTC for storage/transmission
+                        slot_start_utc = current_time.astimezone(pytz.utc)
+                        slot_end_utc = slot_end.astimezone(pytz.utc)
+                        
+                        available_slots.append({
+                            "start_time": slot_start_utc.isoformat(),
+                            "end_time": slot_end_utc.isoformat(),
+                            "date": current_date.isoformat(),
+                            "duration": settings.session_duration
+                        })
+                    
+                    # Move to next slot with buffer
+                    current_time = slot_end + timedelta(minutes=settings.buffer_time)
+            
+            current_date += timedelta(days=1)
+        
+        return jsonify({
+            "mentor_id": mentor_id,
+            "available_slots": available_slots,
+            "timezone": settings.timezone
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in get_available_slots: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({"error": "Internal server error", "message": str(e)}), 500
+
+@api.route('/finalize-booking', methods=['POST'])
+@jwt_required()
+def finalize_booking():
+    """Finalize a booking after successful payment"""
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        # Extract booking details - handle both camelCase and snake_case
+        mentor_id = data.get('mentorId') or data.get('mentor_id')
+        session_start_time = data.get('sessionStartTime') or data.get('session_start_time')
+        session_end_time = data.get('sessionEndTime') or data.get('session_end_time')
+        payment_intent_id = data.get('paymentIntentId') or data.get('payment_intent_id')
+        amount_paid = data.get('amountPaid') or data.get('amount_paid') or data.get('price')
+        notes = data.get('notes', '')
+        
+        # Validate required fields
+        if not all([mentor_id, session_start_time, session_end_time, payment_intent_id]):
+            current_app.logger.error(f"Missing required fields: mentor_id={mentor_id}, start={session_start_time}, end={session_end_time}, payment={payment_intent_id}")
+            return jsonify({"msg": "Missing required booking information"}), 400
+        
+        # Get customer and mentor
+        customer = Customer.query.get(current_user_id)
+        if not customer:
+            return jsonify({"msg": "Customer not found"}), 404
+            
+        mentor = Mentor.query.get(mentor_id)
+        if not mentor:
+            return jsonify({"msg": "Mentor not found"}), 404
+        
+        # Convert datetime strings to datetime objects
+        try:
+            # Handle ISO format with timezone
+            session_start_dt = datetime.fromisoformat(session_start_time.replace('Z', '+00:00'))
+            session_end_dt = datetime.fromisoformat(session_end_time.replace('Z', '+00:00'))
+            
+            # Calculate duration in minutes
+            duration = int((session_end_dt - session_start_dt).total_seconds() / 60)
+        except ValueError as e:
+            current_app.logger.error(f"Invalid datetime format: {e}")
+            return jsonify({"msg": "Invalid datetime format"}), 400
+        
+        # Verify the payment intent with Stripe
+        try:
+            payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+            if payment_intent.status != 'succeeded':
+                return jsonify({"msg": "Payment not confirmed"}), 400
+                
+            # Use the amount from Stripe (in cents) if amount_paid is not provided
+            if not amount_paid:
+                amount_paid = payment_intent.amount / 100
+        except stripe.error.StripeError as e:
+            current_app.logger.error(f"Stripe error: {e}")
+            return jsonify({"msg": f"Payment verification failed: {str(e)}"}), 400
+        
+        # Calculate fees
+        amount_decimal = Decimal(str(amount_paid))
+        platform_fee = amount_decimal * Decimal('0.10')  # 10% platform fee
+        mentor_payout = amount_decimal - platform_fee
+        
+        # Create the booking
+        new_booking = Booking(
+            mentor_id=mentor_id,
+            customer_id=current_user_id,
+            session_start_time=session_start_dt,
+            session_end_time=session_end_dt,
+            session_duration=duration,
+            timezone='UTC',  # Since we're storing UTC times
+            invitee_name=f"{customer.first_name} {customer.last_name}",
+            invitee_email=customer.email,
+            invitee_notes=notes,
+            stripe_payment_intent_id=payment_intent_id,
+            amount_paid=amount_decimal,
+            currency='usd',
+            platform_fee=platform_fee,
+            mentor_payout_amount=mentor_payout,
+            status=BookingStatus.PAID,
+            created_at=datetime.utcnow(),
+            paid_at=datetime.utcnow()
+        )
+        
+        db.session.add(new_booking)
+        db.session.commit()
+        db.session.refresh(new_booking)
+        
+        # Create VideoSDK meeting room
+        try:
+            videosdk_service = VideoSDKService()
+            meeting_result = videosdk_service.create_meeting(
+                booking_id=new_booking.id,
+                mentor_name=f"{mentor.first_name} {mentor.last_name}",
+                customer_name=f"{customer.first_name} {customer.last_name}",
+                start_time=session_start_dt,
+                duration_minutes=duration
+            )
+            
+            if meeting_result['success']:
+                new_booking.meeting_id = meeting_result['meeting_id']
+                new_booking.meeting_url = meeting_result['meeting_url']
+                new_booking.meeting_token = meeting_result['token']
+                db.session.commit()
+                current_app.logger.info(f"Meeting created successfully: {meeting_result['meeting_id']}")
+            else:
+                error_msg = meeting_result.get('error', 'Unknown error')
+                current_app.logger.error(f"Failed to create VideoSDK meeting for booking {new_booking.id}: {error_msg}")
+                
+        except Exception as e:
+            current_app.logger.error(f"Exception creating VideoSDK meeting for booking {new_booking.id}: {str(e)}")
+            import traceback
+            current_app.logger.error(traceback.format_exc())
+        
+        # Return booking details
+        return jsonify({
+            "msg": "Booking created successfully",
+            "booking": {
+                "id": new_booking.id,
+                "mentor_id": new_booking.mentor_id,
+                "customer_id": new_booking.customer_id,
+                "session_start_time": new_booking.session_start_time.isoformat(),
+                "session_end_time": new_booking.session_end_time.isoformat(),
+                "duration": new_booking.session_duration,
+                "price": float(new_booking.amount_paid),
+                "status": new_booking.status.value,
+                "meeting_id": new_booking.meeting_id,
+                "meeting_url": new_booking.meeting_url
+            }
+        }), 201
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in finalize_booking: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        db.session.rollback()
+        return jsonify({"msg": "Failed to create booking"}), 500
+
+@api.route('/mentor/dashboard', methods=['GET'])
+@mentor_required
+def get_mentor_dashboard():
+    """Get mentor dashboard data"""
+    mentor_id = get_jwt_identity()
+    
+    try:
+        # Get upcoming bookings
+        upcoming_bookings = Booking.query.filter(
+            Booking.mentor_id == mentor_id,
+            Booking.session_start_time >= datetime.utcnow(),
+            Booking.status.in_([BookingStatus.PAID, BookingStatus.CONFIRMED])
+        ).order_by(Booking.session_start_time).all()
+        
+        # Get past bookings
+        past_bookings = Booking.query.filter(
+            Booking.mentor_id == mentor_id,
+            Booking.session_start_time < datetime.utcnow(),
+            Booking.status.in_([BookingStatus.COMPLETED, BookingStatus.CONFIRMED])
+        ).order_by(Booking.session_start_time.desc()).limit(10).all()
+        
+        # Calculate statistics
+        total_sessions = Booking.query.filter(
+            Booking.mentor_id == mentor_id,
+            Booking.status == BookingStatus.COMPLETED
+        ).count()
+        
+        # Calculate total hours
+        completed_bookings = Booking.query.filter(
+            Booking.mentor_id == mentor_id,
+            Booking.status == BookingStatus.COMPLETED
+        ).all()
+        
+        total_hours = sum(
+            (booking.session_duration or 60) / 60.0 
+            for booking in completed_bookings
+        )
+        
+        # For now, using placeholder values for rating and completion rate
+        # You can implement actual rating system later
+        average_rating = 4.5
+        completion_rate = 95
+        
+        # Format the upcoming bookings response
+        upcoming_data = []
+        for booking in upcoming_bookings:
+            customer = Customer.query.get(booking.customer_id)
+            upcoming_data.append({
+                "id": booking.id,
+                "student_name": f"{customer.first_name} {customer.last_name}" if customer else "Unknown",
+                "start_time": booking.session_start_time.isoformat() if booking.session_start_time else None,
+                "duration": booking.session_duration or 60,
+                "status": booking.status.value,
+                # Include meeting URL and meeting ID from the database
+                "meeting_url": booking.meeting_url,
+                "meeting_id": booking.meeting_id,
+                "has_meeting": bool(booking.meeting_url)  # Helper boolean for frontend
+            })
+        
+        # Format the past bookings response
+        past_data = []
+        for booking in past_bookings:
+            customer = Customer.query.get(booking.customer_id)
+            past_data.append({
+                "id": booking.id,
+                "student_name": f"{customer.first_name} {customer.last_name}" if customer else "Unknown",
+                "start_time": booking.session_start_time.isoformat() if booking.session_start_time else None,
+                "duration": booking.session_duration or 60,
+                "status": booking.status.value,
+                "rating": None  # Implement rating system later
+            })
+        
+        return jsonify({
+            "upcomingBookings": upcoming_data,
+            "pastBookings": past_data,
+            "stats": {
+                "totalSessions": total_sessions,
+                "totalHours": round(total_hours, 1),
+                "averageRating": average_rating,
+                "completionRate": completion_rate
+            }
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in get_mentor_dashboard: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({"error": "Failed to load dashboard data"}), 500
+# WWORKING WITH OPUS BELOW
+# WWORKING WITH OPUS BELOW
+# WWORKING WITH OPUS BELOW
+# WWORKING WITH OPUS BELOW
+## WWORKING WITH OPUS BELOW
+# WWORKING WITH OPUS BELOW
+# WWORKING WITH OPUS BELOW
+# WWORKING WITH OPUS BELOW
+# WWORKING WITH OPUS BELOW
+# WWORKING WITH OPUS BELOW
+
+@api.route('/mentor/unavailability', methods=['GET'])
+@mentor_required
+def get_mentor_unavailability():
+    """Get all unavailability periods for the current mentor"""
+    mentor_id = get_jwt_identity()
+    
+    try:
+        unavailabilities = MentorUnavailability.query.filter_by(
+            mentor_id=mentor_id
+        ).order_by(MentorUnavailability.start_datetime).all()
+        
+        return jsonify({
+            "unavailabilities": [u.serialize() for u in unavailabilities]
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error getting unavailabilities: {str(e)}")
+        return jsonify({"error": "Failed to fetch unavailabilities"}), 500
+
+@api.route('/mentor/<int:mentor_id>/unavailabilities', methods=['GET'])
+def get_mentor_unavailabilities_public(mentor_id):
+    """Get unavailability periods for a specific mentor (public endpoint for customers)"""
+    try:
+        # Get current date range from query params
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        
+        # Build query
+        query = MentorUnavailability.query.filter_by(mentor_id=mentor_id)
+        
+        # If date range provided, filter to that range
+        if start_date_str and end_date_str:
+            start_date = datetime.fromisoformat(start_date_str).replace(hour=0, minute=0, second=0)
+            end_date = datetime.fromisoformat(end_date_str).replace(hour=23, minute=59, second=59)
+            
+            query = query.filter(
+                MentorUnavailability.start_datetime <= end_date,
+                MentorUnavailability.end_datetime >= start_date
+            )
+        
+        unavailabilities = query.order_by(MentorUnavailability.start_datetime).all()
+        
+        return jsonify({
+            "unavailabilities": [u.serialize() for u in unavailabilities]
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error getting mentor unavailabilities: {str(e)}")
+        return jsonify({"error": "Failed to fetch unavailabilities"}), 500
+
+@api.route('/videosdk/meeting-token/<meeting_id>', methods=['GET'])
+@jwt_required()
+def get_videosdk_meeting_token(meeting_id):
+    """Get a token for joining a specific VideoSDK meeting with extended duration"""
+    try:
+        current_app.logger.info(f"🔑 TOKEN REQUEST: Meeting ID: {meeting_id}")
+        
+        # Get the current user
+        current_user_id = get_jwt_identity()
+        current_app.logger.info(f"📊 Current user ID: {current_user_id}")
+        
+        # Find the booking associated with this meeting
+        booking = Booking.query.filter_by(meeting_id=meeting_id).first()
+        if not booking:
+            current_app.logger.error(f"❌ Meeting not found: {meeting_id}")
+            return jsonify({"msg": "Meeting not found", "success": False}), 404
+            
+        current_app.logger.info(f"📊 Booking found: ID={booking.id}, mentor_id={booking.mentor_id}, customer_id={booking.customer_id}")
+        
+        # Check if the current user is either the mentor or the customer
+        if not (booking.mentor_id == current_user_id or booking.customer_id == current_user_id):
+            current_app.logger.error(f"❌ Unauthorized access: user {current_user_id} not in booking")
+            return jsonify({"msg": "Unauthorized to join this meeting", "success": False}), 403
+            
+        # Generate a token for the meeting with extended duration
+        videosdk_service = VideoSDKService()
+        
+        # Determine user role and permissions
+        is_mentor = booking.mentor_id == current_user_id
+        permissions = ['allow_join', 'allow_mod', 'allow_record'] if is_mentor else ['allow_join']
+        
+        current_app.logger.info(f"📊 User role: {'mentor' if is_mentor else 'customer'}")
+        current_app.logger.info(f"📊 Permissions: {permissions}")
+        
+        # Generate token with 4-hour duration to prevent expiration during meeting
+        current_app.logger.info("🔄 Generating VideoSDK token...")
+        token = videosdk_service.generate_token(permissions, duration_hours=4)
+        current_app.logger.info(f"✅ Token generated: {token[:50]}...")
+        
+        # Get user name for the meeting
+        if is_mentor:
+            mentor = Mentor.query.get(current_user_id)
+            user_name = f"{mentor.first_name} {mentor.last_name}" if mentor else "Mentor"
+        else:
+            customer = Customer.query.get(current_user_id)
+            user_name = f"{customer.first_name} {customer.last_name}" if customer else "Customer"
+        
+        current_app.logger.info(f"📊 User name: {user_name}")
+        
+        response_data = {
+            "token": token,
+            "success": True,
+            "meetingId": meeting_id,
+            "userName": user_name,
+            "isModerator": is_mentor,
+            "tokenExpiryHours": 4
+        }
+        
+        current_app.logger.info(f"✅ Returning successful token response for user: {user_name}")
+        return jsonify(response_data)
+        
+    except Exception as e:
+        current_app.logger.error(f"❌ Error generating meeting token: {str(e)}")
+        import traceback
+        current_app.logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        return jsonify({
+            "msg": "Failed to generate meeting token",
+            "error": str(e),
+            "success": False
+        }), 500
+
+@api.route('/videosdk/refresh-token/<meeting_id>', methods=['POST'])
+@jwt_required()
+def refresh_videosdk_token(meeting_id):
+    """Refresh VideoSDK token for an ongoing meeting"""
+    try:
+        current_app.logger.info(f"🔄 TOKEN REFRESH REQUEST: Meeting ID: {meeting_id}")
+        
+        current_user_id = get_jwt_identity()
+        current_app.logger.info(f"📊 Current user ID: {current_user_id}")
+        
+        # Find the booking associated with this meeting
+        booking = Booking.query.filter_by(meeting_id=meeting_id).first()
+        if not booking:
+            current_app.logger.error(f"❌ Meeting not found for refresh: {meeting_id}")
+            return jsonify({"success": False, "msg": "Meeting not found"}), 404
+            
+        # Check authorization
+        if not (booking.mentor_id == current_user_id or booking.customer_id == current_user_id):
+            current_app.logger.error(f"❌ Unauthorized refresh attempt: user {current_user_id}")
+            return jsonify({"success": False, "msg": "Unauthorized"}), 403
+            
+        # Generate fresh token
+        videosdk_service = VideoSDKService()
+        is_mentor = booking.mentor_id == current_user_id
+        permissions = ['allow_join', 'allow_mod', 'allow_record'] if is_mentor else ['allow_join']
+        
+        current_app.logger.info(f"📊 Refreshing token for {'mentor' if is_mentor else 'customer'}")
+        current_app.logger.info(f"📊 Permissions: {permissions}")
+        
+        fresh_token = videosdk_service.refresh_meeting_token(meeting_id, permissions)
+        
+        if fresh_token:
+            current_app.logger.info(f"✅ Token refreshed successfully: {fresh_token[:50]}...")
+            return jsonify({
+                "success": True,
+                "token": fresh_token,
+                "tokenExpiryHours": 4
+            })
+        else:
+            current_app.logger.error("❌ Failed to generate fresh token")
+            return jsonify({
+                "success": False,
+                "msg": "Failed to refresh token"
+            }), 500
+            
+    except Exception as e:
+        current_app.logger.error(f"❌ Error refreshing token: {str(e)}")
+        import traceback
+        current_app.logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        return jsonify({
+            "success": False,
+            "msg": "Failed to refresh token"
+        }), 500
+
+@api.route('/videosdk/meeting-status/<meeting_id>', methods=['GET'])
+@jwt_required()
+def get_meeting_status(meeting_id):
+    """Get the current status of a VideoSDK meeting"""
+    try:
+        current_app.logger.info(f"📊 MEETING STATUS REQUEST: {meeting_id}")
+        
+        current_user_id = get_jwt_identity()
+        current_app.logger.info(f"📊 Current user ID: {current_user_id}")
+        
+        # Find the booking associated with this meeting
+        booking = Booking.query.filter_by(meeting_id=meeting_id).first()
+        if not booking:
+            current_app.logger.error(f"❌ Meeting not found for status: {meeting_id}")
+            return jsonify({"success": False, "msg": "Meeting not found"}), 404
+            
+        # Check authorization
+        if not (booking.mentor_id == current_user_id or booking.customer_id == current_user_id):
+            current_app.logger.error(f"❌ Unauthorized status request: user {current_user_id}")
+            return jsonify({"success": False, "msg": "Unauthorized"}), 403
+            
+        # Get meeting details from VideoSDK
+        current_app.logger.info("🔄 Fetching meeting details from VideoSDK...")
+        videosdk_service = VideoSDKService()
+        meeting_details = videosdk_service.get_meeting_details(meeting_id)
+        
+        if meeting_details['success']:
+            current_app.logger.info("✅ Meeting details retrieved successfully")
+            return jsonify({
+                "success": True,
+                "meetingId": meeting_id,
+                "status": "active",
+                "details": meeting_details['data']
+            })
+        else:
+            current_app.logger.error(f"❌ Failed to get meeting details: {meeting_details.get('error')}")
+            return jsonify({
+                "success": False,
+                "msg": "Failed to get meeting status",
+                "error": meeting_details.get('error')
+            }), 500
+            
+    except Exception as e:
+        current_app.logger.error(f"❌ Error getting meeting status: {str(e)}")
+        import traceback
+        current_app.logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        return jsonify({
+            "success": False,
+            "msg": "Failed to get meeting status"
+        }), 500
+
+@api.route('/videosdk/end-meeting/<meeting_id>', methods=['POST'])
+@jwt_required()
+def end_videosdk_meeting(meeting_id):
+    """End a VideoSDK meeting (for moderators only)"""
+    try:
+        current_app.logger.info(f"🛑 END MEETING REQUEST: {meeting_id}")
+        
+        current_user_id = get_jwt_identity()
+        current_app.logger.info(f"📊 Current user ID: {current_user_id}")
+        
+        # Find the booking associated with this meeting
+        booking = Booking.query.filter_by(meeting_id=meeting_id).first()
+        if not booking:
+            current_app.logger.error(f"❌ Meeting not found for ending: {meeting_id}")
+            return jsonify({"success": False, "msg": "Meeting not found"}), 404
+            
+        # Only mentors can end meetings
+        if booking.mentor_id != current_user_id:
+            current_app.logger.error(f"❌ Unauthorized end request: user {current_user_id} is not mentor")
+            return jsonify({"success": False, "msg": "Only mentors can end meetings"}), 403
+            
+        # End the meeting
+        current_app.logger.info("🔄 Ending meeting via VideoSDK...")
+        videosdk_service = VideoSDKService()
+        success = videosdk_service.end_meeting(meeting_id)
+        
+        if success:
+            current_app.logger.info("✅ Meeting ended successfully")
+            # Update booking status
+            booking.status = BookingStatus.COMPLETED
+            db.session.commit()
+            current_app.logger.info(f"📊 Booking {booking.id} marked as completed")
+            
+            return jsonify({
+                "success": True,
+                "msg": "Meeting ended successfully"
+            })
+        else:
+            current_app.logger.error("❌ Failed to end meeting via VideoSDK")
+            return jsonify({
+                "success": False,
+                "msg": "Failed to end meeting"
+            }), 500
+            
+    except Exception as e:
+        current_app.logger.error(f"❌ Error ending meeting: {str(e)}")
+        import traceback
+        current_app.logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        return jsonify({
+            "success": False,
+            "msg": "Failed to end meeting"
+        }), 500
+
+@api.route('/videosdk/webhook', methods=['POST'])
+def videosdk_webhook():
+    """Handle VideoSDK webhooks for recording, etc."""
+    try:
+        current_app.logger.info("🔔 VIDEOSDK WEBHOOK RECEIVED")
+        current_app.logger.info(f"📊 Headers: {dict(request.headers)}")
+        
+        # Get webhook secret from environment
+        webhook_secret = os.getenv('VIDEOSDK_WEBHOOK_SECRET')
+        if not webhook_secret:
+            current_app.logger.error("❌ VIDEOSDK_WEBHOOK_SECRET not set in environment variables")
+            return jsonify({"success": False, "error": "Webhook secret not configured"}), 500
+
+        # Get signature from headers
+        signature = request.headers.get('Authorization')
+        current_app.logger.info(f"📊 Signature received: {signature[:20] if signature else 'None'}...")
+        
+        if not signature:
+            current_app.logger.error("❌ No signature provided in webhook")
+            return jsonify({"success": False, "error": "No signature provided"}), 401
+
+        # Verify signature
+        if signature != webhook_secret:
+            current_app.logger.error("❌ Invalid webhook signature")
+            return jsonify({"success": False, "error": "Invalid signature"}), 401
+
+        data = request.json
+        current_app.logger.info(f"📊 Webhook data: {json.dumps(data, indent=2)}")
+        
+        webhook_type = data.get("webhook_type")
+        current_app.logger.info(f"📊 Webhook type: {webhook_type}")
+        
+        if webhook_type == "recording-completed":
+            current_app.logger.info("🎥 Processing recording completed webhook")
+            
+            meeting_id = data.get("data", {}).get("meetingId")
+            recording_url = data.get("data", {}).get("file", {}).get("url")
+            
+            current_app.logger.info(f"📊 Recording details: meeting_id={meeting_id}, url={recording_url}")
+            
+            # Update booking with recording URL
+            booking = Booking.query.filter_by(meeting_id=meeting_id).first()
+            if booking:
+                booking.recording_url = recording_url
+                db.session.commit()
+                current_app.logger.info(f"✅ Updated recording URL for booking {booking.id}")
+            else:
+                current_app.logger.warning(f"⚠️ No booking found for meeting {meeting_id}")
+        else:
+            current_app.logger.info(f"📊 Unhandled webhook type: {webhook_type}")
+        
+        return jsonify({"success": True}), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"❌ Webhook error: {str(e)}")
+        import traceback
+        current_app.logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        return jsonify({"success": False, "error": str(e)}), 500
+    """End a VideoSDK meeting (for moderators only)"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        # Find the booking associated with this meeting
+        booking = Booking.query.filter_by(meeting_id=meeting_id).first()
+        if not booking:
+            return jsonify({"success": False, "msg": "Meeting not found"}), 404
+            
+        # Only mentors can end meetings
+        if booking.mentor_id != current_user_id:
+            return jsonify({"success": False, "msg": "Only mentors can end meetings"}), 403
+            
+        # End the meeting
+        videosdk_service = VideoSDKService()
+        success = videosdk_service.end_meeting(meeting_id)
+        
+        if success:
+            # Update booking status
+            booking.status = BookingStatus.COMPLETED
+            db.session.commit()
+            
+            return jsonify({
+                "success": True,
+                "msg": "Meeting ended successfully"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "msg": "Failed to end meeting"
+            }), 500
+            
+    except Exception as e:
+        current_app.logger.error(f"Error ending meeting: {str(e)}")
+        return jsonify({
+            "success": False,
+            "msg": "Failed to end meeting"
+        }), 500

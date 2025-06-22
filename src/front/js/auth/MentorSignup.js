@@ -9,7 +9,7 @@ import CreatableSelect from "react-select/creatable";
 import { stateOptions, countryOptions } from "../store/data";
 
 
-export const MentorSignup = ({ switchToLogin }) => {
+export const MentorSignup = ({ switchToLogin, onSignupSuccess }) => {
     const { actions } = useContext(Context);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -42,16 +42,14 @@ export const MentorSignup = ({ switchToLogin }) => {
         let isPhoneValid = ValidatePhone(phone, countryCode, setInvalidItems);
 
         if (isEmailValid && isFirstNameValid && isLastNameValid && isPasswordValid && isCityValid && isWhatStateValid && isCountryValid && isPhoneValid) {
-
-            const result = await actions.signUpMentor({
+            const formData = {
                 email, password, first_name, last_name, phone, city, what_state, country
-            });
-
+            };
+            const result = await actions.signUpMentor(formData);
             if (result.success) {
-                alert(result.message || "Account successfully created! Please log in.");
-                switchToLogin();
+                onSignupSuccess(formData.email);
             } else {
-                alert(result.message || "An error occurred during signup. Please try again at another time.");
+                alert(result.message || "Signup failed. Please try again.");
             }
         }
     }

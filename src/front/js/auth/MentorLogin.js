@@ -8,18 +8,29 @@ export const MentorLogin = ({ onSuccess, switchToSignUp, onForgotPs }) => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [invalidItems, setInvalidItems] = useState([]);
+    const [apiError, setApiError] = useState("");
 
     const handleLogin = async () => {
         setInvalidItems([]);
+        setApiError("");
         const isEmailValid = ValidateEmail(email, setInvalidItems);
         const isPasswordValid = ValidatePassword(password, setInvalidItems);
 
         if (isEmailValid && isPasswordValid) {
-            const success = await actions.logInMentor({ email, password });
-            if (success) {
+            const result = await actions.logInMentor({ email, password });
+            if (result.success) {
+                // Remove any existing modal backdrops and cleanup
+                const modalBackdrops = document.getElementsByClassName('modal-backdrop');
+                while (modalBackdrops.length > 0) {
+                    modalBackdrops[0].remove();
+                }
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+
                 if (onSuccess) onSuccess();
             } else {
-                alert("Email and/or password is incorrect. Please try again.");
+                setApiError(result.message || "Email and/or password is incorrect. Please try again.");
             }
         }
     };
@@ -66,6 +77,7 @@ export const MentorLogin = ({ onSuccess, switchToSignUp, onForgotPs }) => {
                         {invalidItems.includes("password") && (
                             <div className="invalid-feedback">Password must be 5-20 characters</div>
                         )}
+                        {apiError && <p className="text-danger mt-2">{apiError}</p>}
                         <div>
                             <span
                                 onClick={() => onForgotPs()}

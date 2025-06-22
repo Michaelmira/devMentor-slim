@@ -1,0 +1,202 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+title: "DevMentor Product Documentation"
+description: "Comprehensive product overview and market positioning"
+version: "1.0"
+created: "2025-06-05"
+tags: ["product", "strategy", "market-analysis", "mentorship"]
+classification: "internal"
+---
+
+# DevMentor Products
+
+## Product Portfolio Overview
+
+| Product | Status | Launch Date | Market |
+|---------|--------|-------------|---------|
+| DevMentor Platform | MVP Development | Q2 2025 | Global Professional Services |
+
+---
+
+## DevMentor Platform
+
+### 1. Product Specifications
+
+| Attribute | Details |
+|-----------|---------|
+| **Product Name** | DevMentor Platform |
+| **Product Type** | SaaS Marketplace |
+| **Launch Date** | Q2 2025 (MVP) |
+| **Platform** | Web + Mobile Responsive |
+| **Business Model** | Commission-based (15% platform fee) |
+
+### 2. Offering
+
+#### What problem does it solve?
+DevMentor solves the friction and inefficiency in professional mentorship by eliminating the traditional barriers of finding qualified mentors, coordinating schedules, handling payments, and managing ongoing mentor-mentee relationships. It transforms mentorship from a networking-dependent, informal process into an accessible, professional service.
+
+#### Feature Matrix
+
+| Feature Category | Components | Status |
+|------------------|------------|--------|
+| **User Management** | Profiles, Authentication, Verification | ✅ Complete |
+| **Discovery** | Search, Filtering, Recommendations | 🚧 In Progress |
+| **Scheduling** | Calendar Integration, Booking System | ✅ Complete |
+| **Payments** | Processing, Escrow, Payouts | ✅ Complete |
+| **Communication** | Messaging, Video Calls, Notifications | 🔄 Planned |
+| **Management** | Dashboards, Analytics, Reviews | 🔄 Planned |
+
+#### Key Benefits to Users
+
+**For Mentees:**
+* Access to vetted, experienced professionals across industries
+* Transparent pricing and availability
+* Instant booking without lengthy back-and-forth communication
+* Secure payment processing with refund protection
+* Centralized session management and history
+
+**For Mentors:**
+* Professional platform to monetize expertise
+* Automated scheduling and payment collection
+* Tools to manage multiple mentees efficiently
+* Built-in calendar integration with existing workflows
+* Revenue tracking and payout management
+
+#### Pricing Model
+* **Commission-based:** 15% platform fee on completed sessions
+* **Mentor sets rates:** Flexible hourly pricing ($50-$500+ per hour)
+* **No subscription fees:** Pay-per-use model for both parties
+* **Payment protection:** Funds held in escrow until session completion
+
+#### Integrations & Dependencies
+* **Calendly API:** Core scheduling functionality
+* **Stripe/PayPal:** Payment processing and payouts
+* **Google Calendar:** Calendar synchronization
+* **Zoom/Google Meet:** Video conferencing integration
+* **SendGrid/Mailgun:** Email notification services
+* **AWS/Cloud Infrastructure:** Hosting and data storage
+
+### 3. Target Audience
+
+### 3. User Demographics & Segmentation
+
+#### Primary User Personas
+
+```mermaid
+graph TD
+    A[DevMentor Users] --> B[Mentees 70%]
+    A --> C[Mentors 30%]
+    
+    B --> D[Career Changer Clara 28-35]
+    B --> E[Startup Sam 24-32] 
+    B --> F[Ambitious Amy 22-27]
+    
+    C --> G[Expert Eric 35-55]
+    C --> H[Consultant Carla 30-50]
+```
+
+#### Persona Details
+
+| Persona | Age | Role | Pain Points | Goals | LTV |
+|---------|-----|------|-------------|-------|-----|
+| **Career Changer Clara** | 28-35 | Mid-level transitioning | Lack connections, unclear path | Successful transition | $500-1500 |
+| **Startup Sam** | 24-32 | Entrepreneur/Founder | Need strategic guidance | Build successful company | $1000-3000 |
+| **Ambitious Amy** | 22-27 | Early-career professional | Limited network, skill gaps | Accelerate growth | $300-800 |
+| **Expert Eric** | 35-55 | Senior executive | Time constraints | Share knowledge, earn income | $2000-5000+ |
+| **Consultant Carla** | 30-50 | Independent consultant | Client acquisition | Expand client base | $1500-4000+ |
+
+#### Customer Segments
+* **Individual Professionals:** 70% of user base - career changers, early-career professionals, entrepreneurs
+* **Corporate Programs:** 20% of potential market - companies purchasing mentorship for employees
+* **Educational Institutions:** 10% of market - universities and bootcamps seeking mentor networks
+
+#### Buyer vs. User Personas
+* **Individual Market:** Buyer = User (mentees pay directly)
+* **Corporate Market:** HR/L&D directors buy, employees use
+* **Educational Market:** Career services buy, students use
+
+### 4. Market Position & Strategy
+
+### 4. Competitive Landscape & Positioning
+
+#### Competitive Analysis Matrix
+
+| Competitor | Focus | Pricing | Strengths | Weaknesses | Market Position |
+|------------|-------|---------|-----------|------------|-----------------|
+| **MentorCruise** | Tech mentorship | $50-200/hr | Tech specialization | Limited scope | Niche leader |
+| **ADPList** | Free mentorship | Free | Large network | No quality control | Volume leader |
+| **GrowthMentor** | Marketing/Growth | $40-150/hr | Growth focus | Narrow vertical | Specialized |
+| **Clarity.fm** | Expert calls | $100-500/hr | High-end experts | Complex booking | Premium positioning |
+| **DevMentor** | Professional mentorship | $50-500/hr | **Seamless UX** | **New entrant** | **Quality-focused** |
+
+#### Market Positioning Strategy
+
+```
+High Quality ↑
+            |
+    Clarity.fm    DevMentor (Target)
+            |           
+            |     MentorCruise
+ADPList     |           
+            |     GrowthMentor
+            |
+Low Quality ↓
+    Free ← Price → Premium
+```
+
+**Unique Value Proposition:**
+> "Professional mentorship made as easy as booking a restaurant reservation"
+
+#### Current Market Position
+* **Market Entry Phase:** Building initial mentor and mentee base
+* **Focus:** Product-market fit and user experience optimization
+* **Geographic Strategy:** English-speaking markets first, then international expansion
+* **Vertical Strategy:** Technology and business mentorship initially, expanding to other industries
+
+#### Acquisition Channels
+
+**Organic Growth:**
+* SEO-optimized mentor profiles and content marketing
+* Social media presence (LinkedIn, Twitter, YouTube)
+* Referral programs for both mentors and mentees
+* PR and thought leadership content
+
+**Paid Acquisition:**
+* Google Ads targeting career-related keywords
+* LinkedIn advertising for professional audiences
+* Content marketing and guest posting
+* Influencer partnerships with industry leaders
+
+**Partnerships:**
+* Bootcamps and educational institutions
+* Professional associations and industry groups
+* Corporate learning and development departments
+* Career coaching and consulting firms
+
+#### Retention Strategies
+
+**For Mentees:**
+* **Educational Resources:** Career guides, industry insights, skill assessments
+* **Community Building:** Mentee forums, success stories, networking events
+* **Progress Tracking:** Goal-setting tools, session history, growth metrics
+* **Loyalty Programs:** Discounts for regular users, referral bonuses
+
+**For Mentors:**
+* **Business Tools:** Analytics dashboard, scheduling optimization, rate recommendations
+* **Professional Development:** Mentor training resources, best practices guides
+* **Community Recognition:** Featured mentor spotlights, success metrics, awards
+* **Revenue Optimization:** Peak-hour insights, pricing guidance, session upselling tools
+
+**Platform-Wide:**
+* **Quality Assurance:** Regular feedback collection, mentor verification, dispute resolution
+* **Product Innovation:** Continuous feature development based on user feedback
+* **Customer Support:** Responsive help desk, onboarding assistance, technical support
+* **Data-Driven Personalization:** AI-powered mentor matching, session recommendations
+
+---
+
+*This product overview serves as the foundational document for DevMentor's go-to-market strategy, product development priorities, and business positioning.*

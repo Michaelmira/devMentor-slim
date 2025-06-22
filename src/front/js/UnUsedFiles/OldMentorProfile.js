@@ -35,9 +35,10 @@ import userIcon from "../../img/user-3296.png";
 
 import "../../styles/mentorProfile.css";
 
-import { StripeConnect } from "../component/StripeConnect";
+import { CalendlyConnectionHandler } from "../component/CalendlyConnectionHandler";
+import { StripeConnect } from "./StripeConnect";
 
-export const MentorProfile = () => {
+export const OldMentorProfile = () => {
   const { actions } = useContext(Context);
   const location = useLocation();
   const navigate = useNavigate();
@@ -408,6 +409,64 @@ export const MentorProfile = () => {
     }
   };
 
+  // In your MentorProfile.js useEffect where you handle Calendly
+  useEffect(() => {
+    const checkCalendlyConnection = async () => {
+      // Handle OAuth callback first
+      const callbackResult = CalendlyConnectionHandler.handleOAuthCallback();
+
+      if (callbackResult === 'success') {
+        // Show success message
+        toast.success("Calendly connected successfully!");
+
+        // Wait a moment then refresh connection status
+        setTimeout(async () => {
+          const result = await CalendlyConnectionHandler.testCalendlyConnection();
+          setCalendlyStatus({
+            connected: result.connected,
+            loading: false,
+            userName: result.userName || null,
+            userEmail: result.userEmail || null,
+            error: result.error || null
+          });
+        }, 1000);
+      } else if (callbackResult && callbackResult.error) {
+        // Show error message
+        toast.error(callbackResult.error);
+      }
+
+      // Always check current connection status
+      const result = await CalendlyConnectionHandler.testCalendlyConnection();
+      setCalendlyStatus({
+        connected: result.connected,
+        loading: false,
+        userName: result.userName || null,
+        userEmail: result.userEmail || null,
+        error: result.error || null
+      });
+    };
+
+    checkCalendlyConnection();
+  }, []);
+
+  const handleConnectCalendly = async () => {
+    setCalendlyStatus(prev => ({ ...prev, loading: true }));
+    await CalendlyConnectionHandler.handleConnectCalendly();
+  };
+
+  const handleDisconnectCalendly = async () => {
+    const success = await CalendlyConnectionHandler.handleDisconnectCalendly();
+    if (success) {
+      setCalendlyStatus({
+        connected: false,
+        loading: false,
+        userName: null,
+        userEmail: null,
+        error: null
+      });
+    }
+  };
+
   return (
     <div className="container card border-secondary shadow border-2 pt-0 mentor-profile">
       <div id="header" className="card-header bg-light-subtle">
@@ -548,6 +607,21 @@ export const MentorProfile = () => {
                 />
               ) : (
                 mentor.nick_name
+              )}
+            </dd>
+
+            <dt className="col-sm-4 form-label">Calendly Url:</dt>
+            <dd className="col-sm-8">
+              {editMode ? (
+                <input
+                  type="text"
+                  name="calendly_url"
+                  value={mentor.calendly_url}
+                  onChange={handleChange}
+                  className="form-control"
+                />
+              ) : (
+                mentor.calendly_url
               )}
             </dd>
 
@@ -849,6 +923,98 @@ export const MentorProfile = () => {
           onHide={() => setShowChangePsModal(false)}
         />
       )}
+
+      <div className="card mb-4">
+        <div className="card-header">
+          <h5 className="mb-0">📅 Calendly Integration</h5>
+        </div>
+        <div className="card-body">
+          {calendlyStatus.loading ? (
+            <div className="d-flex align-items-center">
+              <div className="spinner-border spinner-border-sm me-2" role="status">
+                <span className="visually-hidden">Loading...</span>
+              </div>
+              <span>Checking Calendly connection...</span>
+            </div>
+          ) : calendlyStatus.connected ? (
+            <div className="calendly-connected">
+              <div className="alert alert-success d-flex align-items-center" role="alert">
+                <i className="bi bi-check-circle-fill me-2"></i>
+                <strong>Calendly Connected Successfully!</strong>
+              </div>
+
+              <div className="connection-details mb-3">
+                {calendlyStatus.userName && (
+                  <p className="mb-1">
+                    <strong>Connected as:</strong> {calendlyStatus.userName}
+                  </p>
+                )}
+                {calendlyStatus.userEmail && (
+                  <p className="mb-1">
+                    <strong>Email:</strong> {calendlyStatus.userEmail}
+                  </p>
+                )}
+              </div>
+
+              <div className="d-flex gap-2">
+                <button
+                  onClick={handleDisconnectCalendly}
+                  className="btn btn-outline-danger btn-sm"
+                >
+                  <i className="bi bi-unlink me-1"></i>
+                  Disconnect Calendly
+                </button>
+
+                <button
+                  onClick={async () => {
+                    setCalendlyStatus(prev => ({ ...prev, loading: true }));
+                    const result = await CalendlyConnectionHandler.testCalendlyConnection();
+                    setCalendlyStatus({
+                      connected: result.connected,
+                      loading: false,
+                      userName: result.userName || null,
+                      userEmail: result.userEmail || null,
+                      error: result.error || null
+                    });
+                  }}
+                  className="btn btn-outline-secondary btn-sm"
+                >
+                  <i className="bi bi-arrow-clockwise me-1"></i>
+                  Test Connection
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="calendly-disconnected">
+              <div className="alert alert-info d-flex align-items-center" role="alert">
+                <i className="bi bi-info-circle-fill me-2"></i>
+                <div>
+                  <strong>Connect your Calendly account</strong>
+                  <div className="small">Enable appointment scheduling for your mentees by connecting your Calendly account.</div>
+                </div>
+              </div>
+
+              {calendlyStatus.error && (
+                <div className="alert alert-warning d-flex align-items-center" role="alert">
+                  <i className="bi bi-exclamation-triangle-fill me-2"></i>
+                  <div>
+                    <strong>Connection Issue:</strong> {calendlyStatus.error}
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={handleConnectCalendly}
+                className="btn btn-primary"
+                disabled={calendlyStatus.loading}
+              >
+                <i className="bi bi-calendar-plus me-1"></i>
+                {calendlyStatus.loading ? 'Connecting...' : 'Connect Calendly'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="mb-3">
         <StripeConnect />

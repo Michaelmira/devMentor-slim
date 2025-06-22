@@ -1,0 +1,291 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Dementor App - MVP Implementation Plan
+
+## 🎯 Project Overview
+
+**Platform Type:** Mentorship marketplace  
+**Core Function:** Connecting mentors with clients through integrated scheduling and payments  
+**Target Launch:** Q2 2025
+
+---
+
+## ✅ COMPLETED FEATURES
+
+> **Completion Status:** 70% of core functionality implemented
+
+### 1. Landing Page
+- **Status:** ✅ DONE
+- Basic landing page with "Browse Available Mentors" CTA button
+- Redirects to mentor listing page
+- **Known Gap:** Featured mentors mapping (deprioritized)
+
+### 2. Available Mentors Page  
+- **Status:** ✅ DONE
+- Displays all mentors in listing format
+- No changes currently needed
+
+### 2.5 Mentor Onboarding & Profiles
+- **Status:** ✅ DONE
+- Mentor login/signup system
+- Profile creation with bio and information
+- Image upload (profile + portfolio images)
+- Calendly integration and connection
+- Calendar link management
+
+### 3. Mentor Detail Page - Core Functionality
+- **Status:** ✅ DONE
+- Mentor bio and detailed information display
+- Integrated calendar preview (Calendly-based)
+- Date and time selection interface
+- Authentication flow (signup/login requirement)
+- Payment processing integration
+- Real Calendly booking confirmation
+- Database integration for booking storage
+- Automatic Google Calendar booking via Calendly
+- Auto-generated Google Meet links
+
+### 4. Booking Management Dashboard
+- **Status:** ✅ DONE
+- **For Mentors:**
+  - View upcoming bookings
+  - Access meeting links
+  - Basic booking details (client name, time, payment status)
+- **For Clients:**
+  - View booked sessions
+  - Access meeting links and details
+  - Booking history
+
+### 5. Email Notifications
+- **Status:** ✅ DONE (Handled by Calendly)
+- **Details:** Booking confirmations, reminders, and cancellations are managed directly through Calendly's robust notification system, simplifying the MVP.
+
+---
+
+## 🚧 MVP COMPLETION TASKS
+
+### Phase 1: Essential User Experience (Week 1-2)
+
+#### A. Email Verification on Signup
+- **Priority:** HIGH  DONE 
+- Send a verification email upon user registration.
+- Users must click a link in the email to verify their account before logging in.
+- Include a developer bypass code (`999000`) for faster testing.
+
+#### B. Social Logins
+- **Priority:** COMPLETE FIX BUG WITH CALENDRY LINKED
+- Add Google and GitHub login/signup buttons for both mentors and clients.
+
+#### C. Cancellation System
+- **Priority:** AFTER LAUNCH DO MANUALLY FOR NOW 
+- Client-initiated cancellations (with refund policy)
+- Mentor-initiated cancellations (with rescheduling)
+- Automated calendar updates
+- Refund processing workflow
+
+#### D. Payment & Financial Management
+- **Priority:** HIGH     NOT NEEDED 
+- Transaction history for users
+- Basic payout system for mentors
+- Payment failure handling
+- Receipt generation
+
+#### E. Basic Admin Panel
+- **Priority:** MEDIUM
+- Monitor bookings and transactions
+- Basic mentor approval workflow
+- Handle disputes/issues
+- Platform analytics dashboard
+
+### Phase 2: Operational Essentials (Week 2-3)
+
+#### F. Error Handling & Edge Cases
+- **Priority:** HIGH
+- Calendly API failure handling
+- Payment processing errors
+- Double booking prevention
+- Network connectivity issues
+
+#### G. Mobile Responsiveness
+- **Priority:** HIGH
+- Ensure all pages work on mobile
+- Touch-friendly calendar interface
+- Mobile payment flow optimization
+
+#### H. Basic SEO & Performance
+- **Priority:** LOW-MEDIUM
+- Meta tags and descriptions
+- Page loading optimization
+- Basic analytics integration (Google Analytics)
+
+### Phase 3: Polish & Launch Prep (Week 3-4)
+
+#### I. Error Handling & Edge Cases
+- **Priority:** HIGH
+- Calendly API failure handling
+- Payment processing errors
+- Double booking prevention
+- Network connectivity issues
+
+#### J. Mobile Responsiveness
+- **Priority:** MEDIUM
+- Ensure all pages work on mobile
+- Touch-friendly calendar interface
+- Mobile payment flow optimization
+
+#### K. Basic SEO & Performance
+- **Priority:** LOW-MEDIUM   THROW THIS AWAY
+- Meta tags and descriptions
+- Page loading optimization
+- Basic analytics integration (Google Analytics)
+
+TODO : PRIORITOIZE FOR TICTOK, TWITTER, INSTAGRAM
+
+---
+
+## 🔧 TECHNICAL REQUIREMENTS
+
+### Database Schema Additions Needed
+
+```sql title="Required Database Updates"
+-- Notifications table
+CREATE TABLE notifications (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  type VARCHAR(50) NOT NULL,
+  message TEXT NOT NULL,
+  read_status BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Transactions table (if not exists)
+CREATE TABLE transactions (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  booking_id INT NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  status ENUM('pending', 'completed', 'failed', 'refunded') DEFAULT 'pending',
+  payment_method VARCHAR(50),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (booking_id) REFERENCES bookings(id)
+);
+
+-- Cancellations table
+CREATE TABLE cancellations (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  booking_id INT NOT NULL,
+  cancelled_by ENUM('mentor', 'client') NOT NULL,
+  reason TEXT,
+  refund_status ENUM('pending', 'processed', 'denied') DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (booking_id) REFERENCES bookings(id)
+);
+```
+
+### API Integrations to Complete
+
+| Service | Purpose | Status | Priority |
+|---------|---------|--------|----------|
+| SendGrid/Mailgun | Email notifications | TODO | HIGH |
+| Calendly Webhooks | Enhanced booking sync | PARTIAL | HIGH |
+| Stripe/PayPal | Payment completion | PARTIAL | HIGH |
+| Twilio | SMS notifications | TODO | MEDIUM |
+
+### Security Considerations
+- Input validation on all forms
+- Rate limiting on API endpoints
+- Secure payment data handling
+- User session management
+
+---
+
+## 📋 LAUNCH CHECKLIST
+
+## 📋 LAUNCH CHECKLIST
+
+### Pre-Launch Testing
+- [ ] **End-to-end booking flow** - Complete user journey testing
+- [ ] **Payment processing** - Production environment verification  
+- [ ] **Email notifications** - Delivery and formatting tests
+- [ ] **Mobile responsiveness** - Real device testing across platforms
+- [ ] **Load testing** - Performance with concurrent users
+- [ ] **Backup procedures** - Data recovery and system restore
+- [ ] **Legal compliance** - Terms of service and privacy policy
+- [ ] **Support processes** - Customer service workflows defined
+
+### Launch Day
+- [ ] Monitor error logs
+- [ ] Track key metrics (bookings, payments, errors)
+- [ ] Customer support availability
+- [ ] Marketing materials ready.
+
+### Post-Launch (Week 5+)
+- [ ] User feedback collection
+- [ ] Performance monitoring
+- [ ] Bug fixes and optimizations
+- [ ] Feature prioritization for v2
+
+---
+
+## 🎯 SUCCESS METRICS FOR MVP
+
+### Primary KPIs
+- Successful booking completion rate (target: >80%)
+- Payment success rate (target: >95%)
+- Time to complete booking (target: <5 minutes)
+- User registration to booking conversion (target: >15%)
+
+### Secondary KPIs
+- Email delivery success rate
+- Calendar integration reliability
+- Mobile usage percentage
+- Customer support ticket volume
+
+---
+
+## 💡 RECOMMENDED MVP SCOPE
+
+**INCLUDE:** Core booking flow, payments, basic dashboards, email notifications
+**EXCLUDE:** Advanced features like reviews, complex mentor verification, detailed analytics
+**PHASE 2:** Advanced search/filtering, mentor reviews, detailed reporting, mobile app
+
+---
+
+## ⚡ QUICK WINS (Can implement immediately)
+
+1. **Basic email templates** - Set up confirmation emails
+2. **Simple dashboard wireframes** - Plan the UI for booking management
+3. **Error boundary components** - Add basic error handling
+4. **Loading states** - Improve user experience during API calls
+5. **Basic form validation** - Enhance data quality
+
+
+
+This plan focuses on completing the essential user journey while maintaining the quality of your existing foundation. The MVP should be achievable within 3-4 weeks with focused development.
+
+This plan focuses on completing the essential user journey while maintaining the quality of your existing foundation. The MVP should be achievable within 3-4 weeks with focused development.
+
+
+
+
+
+
+This plan focuses on completing the essential user journey while maintaining the quality of your existing foundation. The MVP should be achievable within 3-4 weeks with focused development.
+
+
+
+Someone build with an expert,  a doership, Hands on learning. Doing together with Vetted people who have already doe it.. End result feature. 
+
+GuildForge
+
+GitDone
+
+Ask AI about all the Little task that can be dobne by a project mananger, 
+
+Have you done this ?   Feature Orientated.   Things they can help you build this successfuly
+
+Experts with aduieance 50 50..  or 7/20 with famous people 
+Single fixed hour rate.

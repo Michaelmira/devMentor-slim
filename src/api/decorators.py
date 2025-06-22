@@ -24,3 +24,4 @@ def customer_required(fn):
         else:
             return jsonify(msg="Customers only!"), 403
     return wrapper
+

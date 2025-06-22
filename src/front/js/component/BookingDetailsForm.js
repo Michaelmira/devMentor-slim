@@ -15,21 +15,14 @@ export const BookingDetailsForm = ({ mentorId, calendlyEventData, paymentIntentD
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        // Pre-fill form data if user is logged in
         if (store.currentUserData?.user_data) {
-            setFormData(prevData => ({
-                ...prevData,
+            setFormData({
                 name: `${store.currentUserData.user_data.first_name || ''} ${store.currentUserData.user_data.last_name || ''}`.trim(),
-                email: store.currentUserData.user_data.email || ''
-            }));
-        } else if (calendlyEventData?.invitee?.email) {
-            // If not logged in, but Calendly has an email (e.g. from prefill in previous step)
-            setFormData(prevData => ({
-                ...prevData,
-                email: calendlyEventData.invitee.email
-            }));
+                email: store.currentUserData.user_data.email || '',
+                notes: ''
+            });
         }
-    }, [store.currentUserData, calendlyEventData]);
+    }, [store.currentUserData]);
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -39,6 +32,12 @@ export const BookingDetailsForm = ({ mentorId, calendlyEventData, paymentIntentD
         e.preventDefault();
         setIsLoading(true);
         setError('');
+
+        if (!store.currentUserData?.user_data) {
+            setError("You must be logged in to finalize the booking.");
+            setIsLoading(false);
+            return;
+        }
 
         try {
             const finalBookingData = {

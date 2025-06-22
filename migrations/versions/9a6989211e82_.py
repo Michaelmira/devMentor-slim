@@ -1,8 +1,8 @@
 """empty message
 
-Revision ID: 93c69d5ed617
+Revision ID: 9a6989211e82
 Revises: 
-Create Date: 2025-05-31 18:26:47.131076
+Create Date: 2025-06-21 22:01:57.778800
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '93c69d5ed617'
+revision = '9a6989211e82'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -29,6 +29,8 @@ def upgrade():
     sa.Column('last_active', sa.DateTime(timezone=True), nullable=True),
     sa.Column('date_joined', sa.DateTime(timezone=True), nullable=True),
     sa.Column('about_me', sa.String(length=2500), nullable=True),
+    sa.Column('is_verified', sa.Boolean(), nullable=False),
+    sa.Column('verification_code', sa.String(length=6), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_customer_email'), 'customer', ['email'], unique=True)
@@ -36,10 +38,6 @@ def upgrade():
     op.create_table('mentor',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('email', sa.String(length=120), nullable=False),
-    sa.Column('calendly_url', sa.String(length=500), nullable=True),
-    sa.Column('calendly_access_token', sa.Text(), nullable=True),
-    sa.Column('calendly_refresh_token', sa.Text(), nullable=True),
-    sa.Column('calendly_token_expires_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.Column('last_active', sa.DateTime(timezone=True), nullable=True),
     sa.Column('password', sa.String(length=256), nullable=False),
@@ -57,6 +55,8 @@ def upgrade():
     sa.Column('price', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('date_joined', sa.DateTime(timezone=True), nullable=True),
     sa.Column('google_oauth_credentials', sa.Text(), nullable=True),
+    sa.Column('is_verified', sa.Boolean(), nullable=False),
+    sa.Column('verification_code', sa.String(length=6), nullable=True),
     sa.Column('stripe_account_id', sa.String(length=255), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('stripe_account_id')
@@ -71,12 +71,12 @@ def upgrade():
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('paid_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('scheduled_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('calendly_event_uri', sa.Text(), nullable=True),
-    sa.Column('calendly_invitee_uri', sa.Text(), nullable=True),
-    sa.Column('calendly_event_start_time', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('calendly_event_end_time', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('invitee_name', sa.String(length=200), nullable=True),
-    sa.Column('invitee_email', sa.String(length=120), nullable=True),
+    sa.Column('session_start_time', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('session_end_time', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('session_duration', sa.Integer(), nullable=True),
+    sa.Column('timezone', sa.String(length=50), nullable=True),
+    sa.Column('invitee_name', sa.String(length=255), nullable=True),
+    sa.Column('invitee_email', sa.String(length=255), nullable=True),
     sa.Column('invitee_notes', sa.Text(), nullable=True),
     sa.Column('stripe_payment_intent_id', sa.String(length=255), nullable=True),
     sa.Column('amount_paid', sa.Numeric(precision=10, scale=2), nullable=True),
@@ -84,11 +84,28 @@ def upgrade():
     sa.Column('platform_fee', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('mentor_payout_amount', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('status', sa.Enum('PENDING_PAYMENT', 'PAID', 'CONFIRMED', 'CANCELLED_BY_CUSTOMER', 'CANCELLED_BY_MENTOR', 'COMPLETED', 'REFUNDED', name='bookingstatus'), nullable=False),
+    sa.Column('google_meet_link', sa.String(length=255), nullable=True),
+    sa.Column('meeting_id', sa.String(length=100), nullable=True),
+    sa.Column('meeting_url', sa.String(length=500), nullable=True),
+    sa.Column('meeting_token', sa.Text(), nullable=True),
+    sa.Column('recording_url', sa.String(length=500), nullable=True),
     sa.ForeignKeyConstraint(['customer_id'], ['customer.id'], ),
     sa.ForeignKeyConstraint(['mentor_id'], ['mentor.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('stripe_payment_intent_id')
     )
-    op.create_index(op.f('ix_booking_stripe_payment_intent_id'), 'booking', ['stripe_payment_intent_id'], unique=False)
+    op.create_table('calendar_settings',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('mentor_id', sa.Integer(), nullable=False),
+    sa.Column('session_duration', sa.Integer(), nullable=True),
+    sa.Column('buffer_time', sa.Integer(), nullable=True),
+    sa.Column('advance_booking_days', sa.Integer(), nullable=True),
+    sa.Column('minimum_notice_hours', sa.Integer(), nullable=True),
+    sa.Column('timezone', sa.String(length=50), nullable=True),
+    sa.ForeignKeyConstraint(['mentor_id'], ['mentor.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('mentor_id')
+    )
     op.create_table('customer_image',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('public_id', sa.String(length=500), nullable=False),
@@ -99,6 +116,19 @@ def upgrade():
     sa.UniqueConstraint('customer_id'),
     sa.UniqueConstraint('image_url'),
     sa.UniqueConstraint('public_id')
+    )
+    op.create_table('mentor_availability',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('mentor_id', sa.Integer(), nullable=False),
+    sa.Column('day_of_week', sa.Integer(), nullable=False),
+    sa.Column('start_time', sa.Time(), nullable=False),
+    sa.Column('end_time', sa.Time(), nullable=False),
+    sa.Column('timezone', sa.String(length=50), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
+    sa.ForeignKeyConstraint(['mentor_id'], ['mentor.id'], ),
+    sa.PrimaryKeyConstraint('id')
     )
     op.create_table('mentor_image',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -113,6 +143,16 @@ def upgrade():
     sa.UniqueConstraint('image_url'),
     sa.UniqueConstraint('mentor_id'),
     sa.UniqueConstraint('public_id')
+    )
+    op.create_table('mentor_unavailability',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('mentor_id', sa.Integer(), nullable=False),
+    sa.Column('start_datetime', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('end_datetime', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('reason', sa.String(length=255), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
+    sa.ForeignKeyConstraint(['mentor_id'], ['mentor.id'], ),
+    sa.PrimaryKeyConstraint('id')
     )
     op.create_table('portfolio_photo',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -130,9 +170,11 @@ def upgrade():
 def downgrade():
     # ### commands auto generated by Alembic - please adjust! ###
     op.drop_table('portfolio_photo')
+    op.drop_table('mentor_unavailability')
     op.drop_table('mentor_image')
+    op.drop_table('mentor_availability')
     op.drop_table('customer_image')
-    op.drop_index(op.f('ix_booking_stripe_payment_intent_id'), table_name='booking')
+    op.drop_table('calendar_settings')
     op.drop_table('booking')
     op.drop_index(op.f('ix_mentor_phone'), table_name='mentor')
     op.drop_index(op.f('ix_mentor_email'), table_name='mentor')

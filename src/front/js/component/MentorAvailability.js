@@ -31,7 +31,8 @@ export const MentorAvailability = () => {
            typeof url === 'string' && 
            url.trim() !== '' && 
            url.includes('calendly.com');
-  };
+  }; 
+  
   
   // Handle URL save
   const handleSaveUrl = () => {

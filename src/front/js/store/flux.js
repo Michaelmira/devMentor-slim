@@ -22,7 +22,6 @@ const getState = ({ getStore, getActions, setStore }) => {
         },
 
         actions: {
-
             getCurrentUser: async () => {
                 try {
                     const response = await fetch(`${process.env.BACKEND_URL}/api/current/user`, {
@@ -34,7 +33,6 @@ const getState = ({ getStore, getActions, setStore }) => {
                     });
                     if (response.ok) {
                         const data = await response.json();
-                        // console.log("userdata from token", data);
                         if (data.role == "mentor") {
                             setStore({
                                 isMentorLoggedIn: true,
@@ -60,32 +58,39 @@ const getState = ({ getStore, getActions, setStore }) => {
                 } catch (error) {
                     console.error("Failed to fetch current user:", error);
                     getActions().logOut();
-                    // alert("Connection error. Please check your internet connection. Otherwise, our server is down at the moment. Please try again at another time.");
                     alert("Token has expired. Please log in again to continue.");
                     return false;
                 }
             },
-            checkStorage: () => {
-                const token = sessionStorage.getItem("token", undefined)
-                const customer_id = sessionStorage.getItem("customerId", undefined)
-                setStore({
-                    token: token,
-                    customerId: customer_id,
-                });
-            },
-            checkStorageMentor: () => {
-                const token = sessionStorage.getItem("token", undefined)
-                const mentor_id = sessionStorage.getItem("mentorId", undefined)
-                const currentUserData = JSON.parse(sessionStorage.getItem("currentUserData"));
-                const isLoggedIn = !!token; // Define a local variable for mentor login status
-                setStore({
-                    token: token,
-                    mentorId: mentor_id,
-                    currentUserData: currentUserData,
-                    isMentorLoggedIn: !!token // set to true if token exists
-                });
 
-                return isLoggedIn;
+            checkStorage: async () => {
+                const token = sessionStorage.getItem("token");
+                const customerId = sessionStorage.getItem("customerId");
+
+                if (token && customerId) {
+                    setStore({
+                        token: token,
+                        customerId: customerId,
+                        isLoggedIn: true
+                    });
+                    return true;
+                }
+                return false;
+            },
+
+            checkStorageMentor: async () => {
+                const token = sessionStorage.getItem("token");
+                const mentorId = sessionStorage.getItem("mentorId");
+
+                if (token && mentorId) {
+                    setStore({
+                        token: token,
+                        mentorId: mentorId,
+                        isMentorLoggedIn: true
+                    });
+                    return true;
+                }
+                return false;
             },
 
             signUpMentor: async (mentor) => {
@@ -130,31 +135,57 @@ const getState = ({ getStore, getActions, setStore }) => {
                 }
 
             },
-            logInMentor: async (mentor) => {
-                const response = await fetch(process.env.BACKEND_URL + "/api/mentor/login", {
-                    method: "POST",
-                    body: JSON.stringify({
-                        email: mentor.email.toLowerCase(),
-                        password: mentor.password
-                    }),
-                    headers: {
-                        "Content-Type": "application/json"
-                    }
-                });
-                if (response.status !== 200) return false;
 
-                const data = await response.json();
-                setStore({
-                    token: data.access_token,
-                    isMentorLoggedIn: true,
-                    mentorId: data.mentor_id,
-                    currentUserData: data.mentor_data,
-                });
-                sessionStorage.setItem("token", data.access_token);
-                sessionStorage.setItem("isMentorLoggedIn", true);
-                sessionStorage.setItem("mentorId", data.mentor_id);
-                sessionStorage.setItem("currentUserData", JSON.stringify(data.mentor_data));
-                return true;
+            logInMentor: async (mentor) => {
+                try {
+                    const response = await fetch(process.env.BACKEND_URL + "/api/mentor/login", {
+                        method: "POST",
+                        body: JSON.stringify({
+                            email: mentor.email.toLowerCase(),
+                            password: mentor.password
+                        }),
+                        headers: {
+                            "Content-Type": "application/json"
+                        }
+                    });
+                    const data = await response.json();
+                    if (response.status !== 200) {
+                        return { success: false, message: data.msg || "Login failed" };
+                    }
+
+                    // Clean up any modal artifacts before setting store state
+                    const modalBackdrops = document.getElementsByClassName('modal-backdrop');
+                    while (modalBackdrops.length > 0) {
+                        modalBackdrops[0].remove();
+                    }
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+
+                    // Clear any existing modals from the DOM
+                    const modals = document.getElementsByClassName('modal');
+                    Array.from(modals).forEach(modal => {
+                        modal.style.display = 'none';
+                        modal.classList.remove('show');
+                        modal.setAttribute('aria-hidden', 'true');
+                        modal.removeAttribute('aria-modal');
+                    });
+
+                    setStore({
+                        token: data.access_token,
+                        isMentorLoggedIn: true,
+                        mentorId: data.mentor_id,
+                        currentUserData: data.mentor_data,
+                    });
+                    sessionStorage.setItem("token", data.access_token);
+                    sessionStorage.setItem("isMentorLoggedIn", "true");
+                    sessionStorage.setItem("mentorId", data.mentor_id);
+                    sessionStorage.setItem("currentUserData", JSON.stringify(data.mentor_data));
+                    return { success: true };
+                } catch (error) {
+                    console.error("Login error:", error);
+                    return { success: false, message: "An unexpected error occurred." };
+                }
             },
 
             getMentors: async () => {
@@ -249,21 +280,22 @@ const getState = ({ getStore, getActions, setStore }) => {
                 const response = await fetch(
                     process.env.BACKEND_URL + "/api/mentor/edit-self", {
                     method: "PUT",
-                    body: JSON.stringify(mentor),
                     headers: {
+                        Authorization: "Bearer " + token,
                         "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`
-                    }
+                    },
+                    body: JSON.stringify(mentor),
                 }
                 );
-                if (response.status !== 200) {
-                    console.log("Error updating mentor information");
-                    return false
-                };
-                const responseBody = await response.json();
-                setStore({ ...getStore(), mentor: responseBody })
-                console.log(responseBody)
-                return true;
+                if (response.ok) {
+                    const responseBody = await response.json();
+                    setStore({ ...getStore(), mentor: responseBody })
+                    console.log("Mentor information updated successfully");
+                    return true;
+                } else {
+                    console.error("Failed to update mentor information");
+                    return false;
+                }
             },
 
             addMentorImage: async (images, positionX, positionY, scale) => {
@@ -351,13 +383,6 @@ const getState = ({ getStore, getActions, setStore }) => {
             },
 
             logOut: () => {
-                // if (getStore().isMentorLoggedIn) {
-                //     window.location.href = process.env.FRONTEND_URL + "/mentor-login"
-                // }
-                // if (getStore().isCustomerLoggedIn) {
-                //     window.location.href = process.env.FRONTEND_URL + "/customer-login"
-                // }
-
                 setStore({
                     token: undefined,
                     customerId: undefined,
@@ -368,11 +393,6 @@ const getState = ({ getStore, getActions, setStore }) => {
                 });
 
                 sessionStorage.clear();
-                // -- or -- (remove specific items from sessionStorage)
-                // sessionStorage.removeItem("token");
-                // sessionStorage.removeItem("customerId");
-
-                // console.log("Logged out. Updated store:", getStore());
                 console.log("Logged out. Token should be undefined:", getStore().token === undefined);
             },
 
@@ -415,29 +435,81 @@ const getState = ({ getStore, getActions, setStore }) => {
             },
 
             logInCustomer: async (customer) => {
-                const response = await fetch(`${process.env.BACKEND_URL}/api/customer/login`, {
-                    method: "POST",
-                    body: JSON.stringify({
-                        email: customer.email.toLowerCase(),
-                        password: customer.password
-                    }),
-                    headers: { "Content-Type": "application/json" }
-                });
-                if (response.ok) {
+                try {
+                    const response = await fetch(process.env.BACKEND_URL + "/api/customer/login", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            email: customer.email.toLowerCase(),
+                            password: customer.password
+                        })
+                    });
                     const data = await response.json();
+
+                    if (!response.ok) {
+                        return { success: false, message: data.msg || "Login failed" };
+                    }
+
+                    // Clean up any modal artifacts before setting store state
+                    const modalBackdrops = document.getElementsByClassName('modal-backdrop');
+                    while (modalBackdrops.length > 0) {
+                        modalBackdrops[0].remove();
+                    }
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+
+                    // Clear any existing modals from the DOM
+                    const modals = document.getElementsByClassName('modal');
+                    Array.from(modals).forEach(modal => {
+                        modal.style.display = 'none';
+                        modal.classList.remove('show');
+                        modal.setAttribute('aria-hidden', 'true');
+                        modal.removeAttribute('aria-modal');
+                    });
+
                     setStore({
-                        token: data.access_token,
+                        isCustomerLoggedIn: true,
                         customerId: data.customer_id,
+                        token: data.access_token,
                         currentUserData: data.customer_data,
-                        isCustomerLoggedIn: true
                     });
                     sessionStorage.setItem("token", data.access_token);
+                    sessionStorage.setItem("isCustomerLoggedIn", "true");
                     sessionStorage.setItem("customerId", data.customer_id);
                     sessionStorage.setItem("currentUserData", JSON.stringify(data.customer_data));
-                    sessionStorage.setItem("isCustomerLoggedIn", true);
+                    return { success: true };
+                } catch (error) {
+                    console.error("Login error:", error);
+                    return { success: false, message: "An unexpected error occurred." };
+                }
+            },
+
+            editCustomer: async (customer) => {
+                const token = getStore().token;
+                if (!token) {
+                    console.error("No token available for editing customer.");
+                    return false;
+                }
+
+                try {
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/customer/edit-self`, {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${token}`
+                        },
+                        body: JSON.stringify(customer)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Failed to update customer with status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    setStore({ currentUserData: data.customer }); // Assuming API returns the updated customer
                     return true;
-                } else {
-                    console.error("Login failed with status:", response.status);
+                } catch (error) {
+                    console.error("Error in editCustomer:", error);
                     return false;
                 }
             },
@@ -577,37 +649,6 @@ const getState = ({ getStore, getActions, setStore }) => {
                     return false
                 }
             },
-
-            // getSessionById: async (sessionId) => {
-            //     const token = sessionStorage.getItem("token"); // or however you're storing the token
-            //     if (!token) {
-            //         console.error("No token found");
-            //         return false;
-            //     }
-
-            //     try {
-            //         const response = await fetch(
-            //             process.env.BACKEND_URL + `/api/session/${sessionId}`, {
-            //             method: "GET",
-            //             headers: {
-            //                 "Content-Type": "application/json",
-            //                 "Authorization": `Bearer ${token}`
-            //             }
-            //         });
-
-            //         if (!response.ok) {
-            //             console.error("Response not OK:", response.status, response.statusText);
-            //             return false;
-            //         }
-
-            //         const sessionData = await response.json();
-            //         console.log("Session data received:", sessionData);
-            //         return sessionData;
-            //     } catch (error) {
-            //         console.error("Error fetching session data:", error);
-            //         return false;
-            //     }
-            // },
 
             getSessionById: async (sessionId) => {
                 const token = sessionStorage.getItem("token"); // Retrieve the token
@@ -940,7 +981,6 @@ const getState = ({ getStore, getActions, setStore }) => {
                     return { success: false, message: "Network error during booking tracking.", data: null };
                 }
             },
-            // Add this to your flux actions
             updateBookingWithCalendlyDetails: async (bookingId, calendlyDetails) => {
                 try {
                     const token = sessionStorage.getItem("token");
@@ -979,6 +1019,7 @@ const getState = ({ getStore, getActions, setStore }) => {
                     return { success: false, message: "Network error occurred while updating booking" };
                 }
             },
+
             fetchCalendlyDetailsAndUpdateBooking: async (bookingId, eventUri, inviteeUri, mentorId) => {
                 try {
                     const token = sessionStorage.getItem("token");
@@ -987,7 +1028,8 @@ const getState = ({ getStore, getActions, setStore }) => {
                         return { success: false, message: "Authentication required." };
                     }
 
-                    const response = await fetch(`${process.env.BACKEND_URL}/api/booking/calendly-sync`, {
+                    // FIXED: Use the correct endpoint that exists in your routes.py
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/sync_booking_with_calendly_details`, {
                         method: "POST",
                         headers: {
                             "Content-Type": "application/json",
@@ -1003,18 +1045,18 @@ const getState = ({ getStore, getActions, setStore }) => {
 
                     const data = await response.json();
 
-                    if (response.ok && data.success) {
-                        // console.log("Successfully fetched Calendly details and updated booking:", data); // Keep concise or remove
-                        return { success: true, booking: data.booking };
+                    if (response.ok) {
+                        return { success: true, ...data };
                     } else {
-                        console.error("Backend failed to fetch Calendly details or update booking:", data);
-                        return { success: false, message: data.message || data.msg || "Failed to sync Calendly details with booking." };
+                        console.error("Failed to sync Calendly details:", data);
+                        return { success: false, message: data.message || "Failed to sync Calendly details" };
                     }
                 } catch (error) {
-                    console.error("Error in fetchCalendlyDetailsAndUpdateBooking action:", error);
-                    return { success: false, message: "Network error during Calendly sync." };
+                    console.error("Error in fetchCalendlyDetailsAndUpdateBooking:", error);
+                    return { success: false, message: "Network error occurred while fetching booking details" };
                 }
             },
+
             finalizeBooking: async (bookingData) => {
                 try {
                     const token = sessionStorage.getItem("token");
@@ -1033,7 +1075,6 @@ const getState = ({ getStore, getActions, setStore }) => {
                     });
 
                     if (response.status === 401) {
-                        // Token expired or invalid - follow your existing pattern
                         getActions().logOut();
                         alert("Your login token has expired. Please log in again to continue.");
                         return { success: false, message: "Session expired. Please log in again." };
@@ -1042,11 +1083,15 @@ const getState = ({ getStore, getActions, setStore }) => {
                     const data = await response.json();
 
                     if (response.ok) {
-                        console.log("Booking finalized successfully:", data);
-                        return { success: true, ...data };
+                        // Refresh user data to ensure booking lists are up-to-date
+                        await getActions().getCurrentUser();
+                        return {
+                            success: true,
+                            booking: data.booking,
+                            message: data.message
+                        };
                     } else {
-                        console.error("Failed to finalize booking:", data);
-                        return { success: false, message: data.msg || data.message || "Failed to finalize booking" };
+                        return { success: false, message: data.msg || "Failed to finalize booking" };
                     }
 
                 } catch (error) {
@@ -1054,7 +1099,6 @@ const getState = ({ getStore, getActions, setStore }) => {
                     return { success: false, message: "Network error occurred while finalizing booking" };
                 }
             },
-            // New action to get booking details by ID
             getBookingDetails: async (bookingId) => {
                 const store = getStore();
                 try {
@@ -1085,7 +1129,847 @@ const getState = ({ getStore, getActions, setStore }) => {
                     console.error("Network error fetching booking details:", error);
                     return { success: false, message: "Network error occurred while fetching booking details" };
                 }
+            },
+            getMentorBookings: async () => {
+                const store = getStore();
+                const token = store.token;
+                if (!token) {
+                    console.error("No token available for fetching mentor bookings.");
+                    return [];
+                }
+
+                try {
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/mentor/bookings`, {
+                        method: "GET",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${token}`
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch mentor bookings with status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    return data;
+                } catch (error) {
+                    console.error("Error in getMentorBookings:", error);
+                    return []; // Return empty array on error
+                }
+            },
+
+            getCustomerBookings: async () => {
+                const store = getStore();
+                const token = store.token;
+                if (!token) {
+                    console.error("No token available for fetching customer bookings.");
+                    return [];
+                }
+
+                try {
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/customer/bookings`, {
+                        method: "GET",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${token}`
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch customer bookings with status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    return data;
+                } catch (error) {
+                    console.error("Error in getCustomerBookings:", error);
+                    return []; // Return empty array on error
+                }
+            },
+
+            verifyCode: async (email, code) => {
+                try {
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/verify-code`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ email: email, code: code })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(data.msg || "Code verification failed");
+                    }
+                    return { success: true, message: data.msg };
+                } catch (error) {
+                    console.error("Error verifying code:", error);
+                    return { success: false, error: error.message };
+                }
+            },
+
+            syncBookingDetails: async (bookingData) => {
+                const store = getStore();
+                const token = sessionStorage.getItem("access_token");
+                if (!token) return { success: false, error: "No access token found" };
+
+                try {
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/booking/calendly-sync`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify(bookingData)
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        // Refresh the user's data to get the updated booking list
+                        await getActions().getCurrentUser();
+                        return { success: true, booking: data.booking };
+                    } else {
+                        const error = await response.json();
+                        return { success: false, error: error.message || "Failed to sync booking details" };
+                    }
+                } catch (error) {
+                    console.error("Error syncing booking details:", error);
+                    return { success: false, error: error.message };
+                }
+            },
+
+            initiateGoogleAuth: async (userType) => {
+                try {
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/auth/google/initiate`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            user_type: userType
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        return {
+                            success: true,
+                            auth_url: data.auth_url
+                        };
+                    } else {
+                        return {
+                            success: false,
+                            message: data.error || "Failed to initiate Google authentication"
+                        };
+                    }
+                } catch (error) {
+                    console.error("Error initiating Google auth:", error);
+                    return {
+                        success: false,
+                        message: "Network error occurred while initiating Google authentication"
+                    };
+                }
+            },
+
+            verifyGoogleAuth: async (authData) => {
+                try {
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/auth/google/verify`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(authData)
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok && data.success) {
+                        // Store user data in session storage and update store
+                        const userType = data.role;
+                        const userData = data[`${userType}_data`];
+                        const userId = data[`${userType}_id`];
+
+                        // Clean up any modal artifacts
+                        const modalBackdrops = document.getElementsByClassName('modal-backdrop');
+                        while (modalBackdrops.length > 0) {
+                            modalBackdrops[0].remove();
+                        }
+                        document.body.classList.remove('modal-open');
+                        document.body.style.overflow = '';
+                        document.body.style.paddingRight = '';
+
+                        // Clear any existing modals from the DOM
+                        const modals = document.getElementsByClassName('modal');
+                        Array.from(modals).forEach(modal => {
+                            modal.style.display = 'none';
+                            modal.classList.remove('show');
+                            modal.setAttribute('aria-hidden', 'true');
+                            modal.removeAttribute('aria-modal');
+                        });
+
+                        // Update store based on user type
+                        if (userType === 'mentor') {
+                            setStore({
+                                token: data.access_token,
+                                isMentorLoggedIn: true,
+                                mentorId: userId,
+                                currentUserData: userData,
+                            });
+                            sessionStorage.setItem("token", data.access_token);
+                            sessionStorage.setItem("isMentorLoggedIn", "true");
+                            sessionStorage.setItem("mentorId", userId);
+                            sessionStorage.setItem("currentUserData", JSON.stringify(userData));
+                        } else {
+                            setStore({
+                                token: data.access_token,
+                                isCustomerLoggedIn: true,
+                                customerId: userId,
+                                currentUserData: userData,
+                            });
+                            sessionStorage.setItem("token", data.access_token);
+                            sessionStorage.setItem("isCustomerLoggedIn", "true");
+                            sessionStorage.setItem("customerId", userId);
+                            sessionStorage.setItem("currentUserData", JSON.stringify(userData));
+                        }
+
+                        return {
+                            success: true,
+                            userType: userType,
+                            userData: userData
+                        };
+                    } else {
+                        return {
+                            success: false,
+                            message: data.error || "Authentication verification failed"
+                        };
+                    }
+                } catch (error) {
+                    console.error("Error verifying Google auth:", error);
+                    return {
+                        success: false,
+                        message: "Network error occurred during authentication verification"
+                    };
+                }
+            },
+
+            initiateGitHubAuth: async (userType) => {
+                try {
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/auth/github/initiate`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            user_type: userType
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        return {
+                            success: true,
+                            auth_url: data.auth_url
+                        };
+                    } else {
+                        return {
+                            success: false,
+                            message: data.error || "Failed to initiate GitHub authentication"
+                        };
+                    }
+                } catch (error) {
+                    console.error("Error initiating GitHub auth:", error);
+                    return {
+                        success: false,
+                        message: "Network error occurred while initiating GitHub authentication"
+                    };
+                }
+            },
+
+            verifyGitHubAuth: async (authData) => {
+                try {
+                    console.log('🔄 Verifying GitHub auth with data:', authData);
+
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/auth/github/verify`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(authData)
+                    });
+
+                    const data = await response.json();
+                    console.log('📊 GitHub auth verification response:', data);
+
+                    if (response.ok && data.success) {
+                        // Store user data in session storage and update store
+                        const userType = data.role;
+                        const userData = data[`${userType}_data`];
+                        const userId = data[`${userType}_id`];
+
+                        console.log('✅ GitHub auth verified successfully:', { userType, userId });
+
+                        // Clean up any modal artifacts (same as Google OAuth)
+                        const modalBackdrops = document.getElementsByClassName('modal-backdrop');
+                        while (modalBackdrops.length > 0) {
+                            modalBackdrops[0].remove();
+                        }
+                        document.body.classList.remove('modal-open');
+                        document.body.style.overflow = '';
+                        document.body.style.paddingRight = '';
+
+                        // Clear any existing modals from the DOM
+                        const modals = document.getElementsByClassName('modal');
+                        Array.from(modals).forEach(modal => {
+                            modal.style.display = 'none';
+                            modal.classList.remove('show');
+                            modal.setAttribute('aria-hidden', 'true');
+                            modal.removeAttribute('aria-modal');
+                        });
+
+                        // Update store based on user type - EXACTLY like Google OAuth
+                        if (userType === 'mentor') {
+                            setStore({
+                                token: data.access_token,
+                                isMentorLoggedIn: true,
+                                mentorId: userId,
+                                currentUserData: userData,
+                            });
+                            sessionStorage.setItem("token", data.access_token);
+                            sessionStorage.setItem("isMentorLoggedIn", "true");
+                            sessionStorage.setItem("mentorId", userId);
+                            sessionStorage.setItem("currentUserData", JSON.stringify(userData));
+
+                            console.log('✅ Mentor GitHub auth stored successfully');
+                        } else {
+                            setStore({
+                                token: data.access_token,
+                                isCustomerLoggedIn: true,
+                                customerId: userId,
+                                currentUserData: userData,
+                            });
+                            sessionStorage.setItem("token", data.access_token);
+                            sessionStorage.setItem("isCustomerLoggedIn", "true");
+                            sessionStorage.setItem("customerId", userId);
+                            sessionStorage.setItem("currentUserData", JSON.stringify(userData));
+
+                            console.log('✅ Customer GitHub auth stored successfully');
+                        }
+
+                        // Verify token was stored correctly
+                        const storedToken = sessionStorage.getItem("token");
+                        console.log('🔍 Token verification after GitHub auth:', {
+                            tokenStored: !!storedToken,
+                            tokenPreview: storedToken ? storedToken.substring(0, 20) + '...' : 'none'
+                        });
+
+                        return {
+                            success: true,
+                            userType: userType,
+                            userData: userData
+                        };
+                    } else {
+                        console.error('❌ GitHub auth verification failed:', data);
+                        return {
+                            success: false,
+                            message: data.error || "GitHub authentication verification failed"
+                        };
+                    }
+                } catch (error) {
+                    console.error("❌ Error verifying GitHub auth:", error);
+                    return {
+                        success: false,
+                        message: "Network error occurred during GitHub authentication verification"
+                    };
+                }
+            },
+
+
+            initiateMVPGoogleAuth: async (mentorId) => {
+                try {
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/auth/mvp/google/initiate`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            mentor_id: mentorId
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        return {
+                            success: true,
+                            auth_url: data.auth_url
+                        };
+                    } else {
+                        console.error('MVP Google OAuth initiation failed:', data);
+                        return {
+                            success: false,
+                            message: data.error || 'Failed to initiate Google authentication'
+                        };
+                    }
+                } catch (error) {
+                    console.error('MVP Google OAuth initiation error:', error);
+                    return {
+                        success: false,
+                        message: 'Network error occurred'
+                    };
+                }
+            },
+
+            // MVP Google OAuth - Verify (reuse regular verification)
+            verifyMVPGoogleAuth: async (authData) => {
+                try {
+                    // Since MVP creates customer accounts, we can reuse the regular Google verification
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/auth/google/verify`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(authData)
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok && data.success) {
+                        // Store the token and user data
+                        sessionStorage.setItem("token", data.access_token);
+                        sessionStorage.setItem("user_role", data.role);
+
+                        setStore({
+                            token: data.access_token,
+                            user: data.customer_data,
+                            userRole: data.role,
+                            isLoggedIn: true
+                        });
+
+                        return {
+                            success: true,
+                            user_data: data.customer_data,
+                            role: data.role,
+                            message: 'Authentication successful'
+                        };
+                    } else {
+                        console.error('MVP Google auth verification failed:', data);
+                        return {
+                            success: false,
+                            message: data.error || 'Authentication verification failed'
+                        };
+                    }
+                } catch (error) {
+                    console.error('MVP Google auth verification error:', error);
+                    return {
+                        success: false,
+                        message: 'Network error occurred during verification'
+                    };
+                }
+            },
+
+            initiateMVPGitHubAuth: async (mentorId) => {
+                try {
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/auth/mvp/github/initiate`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            mentor_id: mentorId
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        return {
+                            success: true,
+                            auth_url: data.auth_url
+                        };
+                    } else {
+                        return {
+                            success: false,
+                            message: data.error || "Failed to initiate GitHub authentication"
+                        };
+                    }
+                } catch (error) {
+                    console.error("Error initiating MVP GitHub auth:", error);
+                    return {
+                        success: false,
+                        message: "Network error occurred while initiating GitHub authentication"
+                    };
+                }
+            },
+
+            verifyMVPGitHubAuth: async (authData) => {
+                try {
+                    // Use the same verification endpoint as regular GitHub OAuth since JWT verification is the same
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/auth/github/verify`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(authData)
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok && data.success) {
+                        // Store user data in session storage and update store (same as regular OAuth)
+                        const userType = data.role;
+                        const userData = data[`${userType}_data`];
+                        const userId = data[`${userType}_id`];
+
+                        // Update store for customer
+                        setStore({
+                            token: data.access_token,
+                            isCustomerLoggedIn: true,
+                            customerId: userId,
+                            currentUserData: userData,
+                        });
+                        sessionStorage.setItem("token", data.access_token);
+                        sessionStorage.setItem("isCustomerLoggedIn", "true");
+                        sessionStorage.setItem("customerId", userId);
+                        sessionStorage.setItem("currentUserData", JSON.stringify(userData));
+
+                        return {
+                            success: true,
+                            userType: userType,
+                            userData: userData
+                        };
+                    } else {
+                        return {
+                            success: false,
+                            message: data.error || "GitHub authentication verification failed"
+                        };
+                    }
+                } catch (error) {
+                    console.error("Error verifying MVP GitHub auth:", error);
+                    return {
+                        success: false,
+                        message: "Network error occurred during GitHub authentication verification"
+                    };
+                }
+            },
+
+            getMentorAvailability: async () => {
+                try {
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/mentor/availability`, {
+                        method: "GET",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${getStore().token}`
+                        }
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        return {
+                            success: true,
+                            availabilities: data.availabilities,
+                            settings: data.settings
+                        };
+                    } else {
+                        console.error("Failed to fetch mentor availability");
+                        return { success: false, message: "Failed to fetch availability" };
+                    }
+                } catch (error) {
+                    console.error("Error fetching mentor availability:", error);
+                    return { success: false, message: "Network error" };
+                }
+            },
+
+            setMentorAvailability: async (availabilityData) => {
+                try {
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/mentor/availability`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${getStore().token}`
+                        },
+                        body: JSON.stringify(availabilityData)
+                    });
+
+                    if (response.ok) {
+                        return { success: true, message: "Availability updated successfully" };
+                    } else {
+                        return { success: false, message: "Failed to update availability" };
+                    }
+                } catch (error) {
+                    console.error("Error updating mentor availability:", error);
+                    return { success: false, message: "Network error" };
+                }
+            },
+
+            getMentorUnavailability: async () => {
+                try {
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/mentor/unavailability`, {
+                        method: "GET",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${getStore().token}`
+                        }
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        return {
+                            success: true,
+                            unavailabilities: data.unavailabilities || []
+                        };
+                    } else {
+                        return { success: false, message: "Failed to fetch unavailability" };
+                    }
+                } catch (error) {
+                    console.error("Error fetching unavailability:", error);
+                    return { success: false, message: "Network error" };
+                }
+            },
+
+            addMentorUnavailability: async (unavailabilityData) => {
+                try {
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/mentor/unavailability`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${getStore().token}`
+                        },
+                        body: JSON.stringify(unavailabilityData)
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        return { success: true, message: "Unavailability added", id: data.id };
+                    } else {
+                        return { success: false, message: "Failed to add unavailability" };
+                    }
+                } catch (error) {
+                    console.error("Error adding unavailability:", error);
+                    return { success: false, message: "Network error" };
+                }
+            },
+
+            removeMentorUnavailability: async (unavailabilityId) => {
+                try {
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/mentor/unavailability/${unavailabilityId}`, {
+                        method: "DELETE",
+                        headers: {
+                            "Authorization": `Bearer ${getStore().token}`
+                        }
+                    });
+
+                    if (response.ok) {
+                        return { success: true, message: "Unavailability removed" };
+                    } else {
+                        return { success: false, message: "Failed to remove unavailability" };
+                    }
+                } catch (error) {
+                    console.error("Error removing unavailability:", error);
+                    return { success: false, message: "Network error" };
+                }
+            },
+
+            getMentorAvailableSlots: async (mentorId, startDate, endDate) => {
+                try {
+                    const params = new URLSearchParams();
+                    if (startDate) params.append('start_date', startDate);
+                    if (endDate) params.append('end_date', endDate);
+
+                    const response = await fetch(
+                        `${process.env.BACKEND_URL}/api/mentor/${mentorId}/available-slots?${params}`,
+                        {
+                            method: "GET",
+                            headers: {
+                                "Content-Type": "application/json"
+                            }
+                        }
+                    );
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        return {
+                            success: true,
+                            slots: data.available_slots,
+                            timezone: data.timezone
+                        };
+                    } else {
+                        return { success: false, message: "Failed to fetch available slots" };
+                    }
+                } catch (error) {
+                    console.error("Error fetching available slots:", error);
+                    return { success: false, message: "Network error" };
+                }
+            },
+
+            createMeetingForBooking: async (bookingId) => {
+                try {
+                    const token = sessionStorage.getItem("token");
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/booking/${bookingId}/create-meeting`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${token}`
+                        }
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        return { success: true, ...data };
+                    } else {
+                        const error = await response.json();
+                        return { success: false, error: error.msg };
+                    }
+                } catch (error) {
+                    console.error("Error creating meeting:", error);
+                    return { success: false, error: "Network error" };
+                }
+            },
+
+            // Add these actions to your existing flux.js file
+
+            // In the actions object, add these new methods:
+
+            refreshMeetingToken: async (meetingId) => {
+                try {
+                    const store = getStore();
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/videosdk/refresh-token/${meetingId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + store.token
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to refresh meeting token');
+                    }
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        return {
+                            success: true,
+                            token: data.token,
+                            expiryHours: data.tokenExpiryHours
+                        };
+                    } else {
+                        throw new Error(data.msg || 'Token refresh failed');
+                    }
+                } catch (error) {
+                    console.error('Error refreshing meeting token:', error);
+                    return {
+                        success: false,
+                        error: error.message
+                    };
+                }
+            },
+
+            getMeetingStatus: async (meetingId) => {
+                try {
+                    const store = getStore();
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/videosdk/meeting-status/${meetingId}`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': 'Bearer ' + store.token
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to get meeting status');
+                    }
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        return {
+                            success: true,
+                            status: data.status,
+                            details: data.details
+                        };
+                    } else {
+                        throw new Error(data.msg || 'Failed to get meeting status');
+                    }
+                } catch (error) {
+                    console.error('Error getting meeting status:', error);
+                    return {
+                        success: false,
+                        error: error.message
+                    };
+                }
+            },
+
+            endMeeting: async (meetingId) => {
+                try {
+                    const store = getStore();
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/videosdk/end-meeting/${meetingId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + store.token
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to end meeting');
+                    }
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        return {
+                            success: true,
+                            message: data.msg
+                        };
+                    } else {
+                        throw new Error(data.msg || 'Failed to end meeting');
+                    }
+                } catch (error) {
+                    console.error('Error ending meeting:', error);
+                    return {
+                        success: false,
+                        error: error.message
+                    };
+                }
+            },
+
+            // Enhanced getMeetingToken with better error handling
+            getMeetingToken: async (meetingId) => {
+                try {
+                    const store = getStore();
+                    const response = await fetch(`${process.env.BACKEND_URL}/api/videosdk/meeting-token/${meetingId}`, {
+                        headers: {
+                            'Authorization': 'Bearer ' + store.token
+                        }
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.msg || 'Failed to get meeting token');
+                    }
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        return {
+                            success: true,
+                            token: data.token,
+                            userName: data.userName,
+                            isModerator: data.isModerator,
+                            tokenExpiryHours: data.tokenExpiryHours
+                        };
+                    } else {
+                        throw new Error('Invalid response from server');
+                    }
+                } catch (error) {
+                    console.error('Error getting meeting token:', error);
+                    return {
+                        success: false,
+                        error: error.message
+                    };
+                }
             }
+
+
+
+
 
         }
     };

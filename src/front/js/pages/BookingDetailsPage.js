@@ -1,9 +1,19 @@
-import React from 'react';
+import React, { useEffect, useContext } from 'react';
 import { BookingDetailsForm } from '../component/BookingDetailsForm';
-import { useLocation, Link } from 'react-router-dom'; // Added Link for fallback
+import { useLocation, Link, useNavigate } from 'react-router-dom'; // Added Link for fallback
+import { Context } from '../store/appContext';
 
 export const BookingDetailsPage = () => {
+    const { store } = useContext(Context);
     const location = useLocation();
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        if (!store.token) {
+            alert("You must be logged in to book a session.");
+            navigate('/');
+        }
+    }, [store.token, navigate]);
 
     console.log("BookingDetailsPage location.state:", location.state);
     if (location.state && location.state.calendlyEventData) {
