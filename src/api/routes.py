@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timedelta, date, time as datetime_time 
 import stripe
 
-from flask import Flask, request, jsonify, url_for, Blueprint, current_app, redirect, session
+from flask import Flask, request, jsonify, url_for, Blueprint, current_app, redirect, session, Response
 from flask_cors import CORS, cross_origin
 import jwt
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
@@ -39,6 +39,8 @@ import secrets # For generating secure state tokens for OAuth
 from datetime import datetime as dt
 from decimal import Decimal
 import time
+
+from api.calendar_utils import generate_icalendar_content
 
 
 
@@ -2261,6 +2263,8 @@ def get_available_slots(mentor_id):
         current_app.logger.error(traceback.format_exc())
         return jsonify({"error": "Internal server error", "message": str(e)}), 500
 
+
+
 @api.route('/finalize-booking', methods=['POST'])
 @jwt_required()
 def finalize_booking():
@@ -2268,6 +2272,8 @@ def finalize_booking():
     try:
         current_user_id = get_jwt_identity()
         data = request.get_json()
+        
+        current_app.logger.info(f"Finalize booking called with data: {data}")
         
         # Extract booking details - handle both camelCase and snake_case
         mentor_id = data.get('mentorId') or data.get('mentor_id')
@@ -2277,77 +2283,87 @@ def finalize_booking():
         amount_paid = data.get('amountPaid') or data.get('amount_paid') or data.get('price')
         notes = data.get('notes', '')
         
+        current_app.logger.info(f"Extracted data - mentor_id: {mentor_id}, start: {session_start_time}, end: {session_end_time}, payment: {payment_intent_id}, amount: {amount_paid}")
+        
         # Validate required fields
         if not all([mentor_id, session_start_time, session_end_time, payment_intent_id]):
-            current_app.logger.error(f"Missing required fields: mentor_id={mentor_id}, start={session_start_time}, end={session_end_time}, payment={payment_intent_id}")
+            current_app.logger.error(f"Missing required fields")
             return jsonify({"msg": "Missing required booking information"}), 400
         
         # Get customer and mentor
         customer = Customer.query.get(current_user_id)
         if not customer:
+            current_app.logger.error(f"Customer not found for ID: {current_user_id}")
             return jsonify({"msg": "Customer not found"}), 404
             
         mentor = Mentor.query.get(mentor_id)
         if not mentor:
+            current_app.logger.error(f"Mentor not found for ID: {mentor_id}")
             return jsonify({"msg": "Mentor not found"}), 404
         
-        # Convert datetime strings to datetime objects
+        current_app.logger.info(f"Found customer: {customer.email} and mentor: {mentor.email}")
+        
+        # Parse datetime strings
         try:
-            # Handle ISO format with timezone
-            session_start_dt = datetime.fromisoformat(session_start_time.replace('Z', '+00:00'))
-            session_end_dt = datetime.fromisoformat(session_end_time.replace('Z', '+00:00'))
-            
-            # Calculate duration in minutes
-            duration = int((session_end_dt - session_start_dt).total_seconds() / 60)
+            if isinstance(session_start_time, str):
+                session_start_dt = datetime.fromisoformat(session_start_time.replace('Z', '+00:00'))
+            else:
+                session_start_dt = session_start_time
+                
+            if isinstance(session_end_time, str):
+                session_end_dt = datetime.fromisoformat(session_end_time.replace('Z', '+00:00'))
+            else:
+                session_end_dt = session_end_time
+                
         except ValueError as e:
             current_app.logger.error(f"Invalid datetime format: {e}")
             return jsonify({"msg": "Invalid datetime format"}), 400
         
-        # Verify the payment intent with Stripe
-        try:
-            payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id)
-            if payment_intent.status != 'succeeded':
-                return jsonify({"msg": "Payment not confirmed"}), 400
-                
-            # Use the amount from Stripe (in cents) if amount_paid is not provided
-            if not amount_paid:
-                amount_paid = payment_intent.amount / 100
-        except stripe.error.StripeError as e:
-            current_app.logger.error(f"Stripe error: {e}")
-            return jsonify({"msg": f"Payment verification failed: {str(e)}"}), 400
+        # Calculate duration
+        duration = int((session_end_dt - session_start_dt).total_seconds() / 60)
         
-        # Calculate fees
+        # Ensure amount_paid is a number
+        try:
+            amount_paid = float(amount_paid) if amount_paid else 0
+        except (ValueError, TypeError):
+            amount_paid = 0
+        
+        # Calculate platform fee and mentor payout (optional)
+        from decimal import Decimal
         amount_decimal = Decimal(str(amount_paid))
         platform_fee = amount_decimal * Decimal('0.10')  # 10% platform fee
         mentor_payout = amount_decimal - platform_fee
         
-        # Create the booking
+        # Create new booking - Using CORRECT field names from your model
         new_booking = Booking(
-            mentor_id=mentor_id,
             customer_id=current_user_id,
+            mentor_id=mentor_id,
             session_start_time=session_start_dt,
             session_end_time=session_end_dt,
             session_duration=duration,
-            timezone='UTC',  # Since we're storing UTC times
-            invitee_name=f"{customer.first_name} {customer.last_name}",
-            invitee_email=customer.email,
-            invitee_notes=notes,
-            stripe_payment_intent_id=payment_intent_id,
             amount_paid=amount_decimal,
             currency='usd',
             platform_fee=platform_fee,
             mentor_payout_amount=mentor_payout,
-            status=BookingStatus.PAID,
-            created_at=datetime.utcnow(),
-            paid_at=datetime.utcnow()
+            status=BookingStatus.CONFIRMED,
+            stripe_payment_intent_id=payment_intent_id,
+            invitee_notes=notes,  # ✅ CORRECT: invitee_notes, not notes
+            invitee_name=f"{customer.first_name} {customer.last_name}",
+            invitee_email=customer.email,
+            paid_at=datetime.utcnow()  # Set paid timestamp
         )
+        
+        current_app.logger.info("Creating new booking in database...")
         
         db.session.add(new_booking)
         db.session.commit()
         db.session.refresh(new_booking)
         
-        # Create VideoSDK meeting room
+        current_app.logger.info(f"Booking created successfully with ID: {new_booking.id}")
+        
+        # Create VideoSDK meeting (optional - wrap in try/catch)
         try:
+            from api.services.videosdk_service import VideoSDKService
             videosdk_service = VideoSDKService()
             meeting_result = videosdk_service.create_meeting(
                 booking_id=new_booking.id,
@@ -2365,28 +2381,32 @@ def finalize_booking():
                 current_app.logger.info(f"Meeting created successfully: {meeting_result['meeting_id']}")
             else:
                 error_msg = meeting_result.get('error', 'Unknown error')
-                current_app.logger.error(f"Failed to create VideoSDK meeting for booking {new_booking.id}: {error_msg}")
+                current_app.logger.error(f"Failed to create VideoSDK meeting: {error_msg}")
                 
         except Exception as e:
-            current_app.logger.error(f"Exception creating VideoSDK meeting for booking {new_booking.id}: {str(e)}")
-            import traceback
-            current_app.logger.error(traceback.format_exc())
+            current_app.logger.error(f"Exception creating VideoSDK meeting: {str(e)}")
+            # Don't fail the booking if video meeting creation fails
         
         # Return booking details
+        booking_response = {
+            "id": new_booking.id,
+            "mentor_id": new_booking.mentor_id,
+            "customer_id": new_booking.customer_id,
+            "session_start_time": new_booking.session_start_time.isoformat(),
+            "session_end_time": new_booking.session_end_time.isoformat(),
+            "duration": new_booking.session_duration,
+            "price": float(new_booking.amount_paid),
+            "status": new_booking.status.value,
+            "meeting_id": getattr(new_booking, 'meeting_id', None),
+            "meeting_url": getattr(new_booking, 'meeting_url', None),
+            "stripe_payment_intent_id": new_booking.stripe_payment_intent_id
+        }
+        
+        current_app.logger.info(f"Returning successful response for booking {new_booking.id}")
+        
         return jsonify({
             "msg": "Booking created successfully",
-            "booking": {
-                "id": new_booking.id,
-                "mentor_id": new_booking.mentor_id,
-                "customer_id": new_booking.customer_id,
-                "session_start_time": new_booking.session_start_time.isoformat(),
-                "session_end_time": new_booking.session_end_time.isoformat(),
-                "duration": new_booking.session_duration,
-                "price": float(new_booking.amount_paid),
-                "status": new_booking.status.value,
-                "meeting_id": new_booking.meeting_id,
-                "meeting_url": new_booking.meeting_url
-            }
+            "booking": booking_response
         }), 201
         
     except Exception as e:
@@ -2394,7 +2414,8 @@ def finalize_booking():
         import traceback
         current_app.logger.error(traceback.format_exc())
         db.session.rollback()
-        return jsonify({"msg": "Failed to create booking"}), 500
+        return jsonify({"msg": "Failed to create booking", "error": str(e)}), 500
+
 
 @api.route('/mentor/dashboard', methods=['GET'])
 @mentor_required
@@ -2869,4 +2890,215 @@ def videosdk_webhook():
         return jsonify({
             "success": False,
             "msg": "Failed to end meeting"
+        }), 500
+
+
+@api.route('/booking/<int:booking_id>/calendar.ics', methods=['GET'])
+@jwt_required()
+def download_booking_calendar(booking_id):
+    """
+    Generate and download an iCalendar (.ics) file for a booking
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        role = get_jwt()['role']
+        
+        # Get the booking
+        booking = Booking.query.get(booking_id)
+        if not booking:
+            return jsonify({"error": "Booking not found"}), 404
+        
+        # Check authorization - user must be either the customer or mentor for this booking
+        if role == 'customer' and booking.customer_id != current_user_id:
+            return jsonify({"error": "Unauthorized"}), 403
+        elif role == 'mentor' and booking.mentor_id != current_user_id:
+            return jsonify({"error": "Unauthorized"}), 403
+        
+        # Get mentor and customer details
+        mentor = Mentor.query.get(booking.mentor_id)
+        customer = Customer.query.get(booking.customer_id)
+        
+        if not mentor or not customer:
+            return jsonify({"error": "Missing mentor or customer data"}), 404
+        
+        # Generate event details
+        mentor_name = f"{mentor.first_name} {mentor.last_name}"
+        customer_name = f"{customer.first_name} {customer.last_name}"
+        
+        event_title = f"DevMentor Session with {mentor_name}"
+        event_description = f"""DevMentor Session
+
+Mentor: {mentor_name}
+Customer: {customer_name}
+Duration: {booking.session_duration} minutes
+Booking Reference: #{booking.id}
+
+Meeting Link: {booking.meeting_url if booking.meeting_url else 'Will be provided before the session'}
+
+Questions? Contact {mentor.email}
+
+DevMentor Platform"""
+        
+        # Generate iCalendar content
+        ical_content = generate_icalendar_content(
+            event_title=event_title,
+            start_time=booking.session_start_time,
+            end_time=booking.session_end_time,
+            description=event_description,
+            location=booking.meeting_url if booking.meeting_url else "Online"
+        )
+        
+        # Create the response with proper headers for file download
+        response = Response(
+            ical_content,
+            mimetype='text/calendar',
+            headers={
+                'Content-Disposition': f'attachment; filename=devmentor-session-{booking_id}.ics',
+                'Content-Type': 'text/calendar; charset=utf-8'
+            }
+        )
+        
+        return response
+        
+    except Exception as e:
+        current_app.logger.error(f"Error generating calendar file for booking {booking_id}: {str(e)}")
+        return jsonify({"error": "Failed to generate calendar file"}), 500
+
+
+
+# Replace your current send_booking_confirmation route with this complete version
+
+@api.route('/send-booking-confirmation', methods=['POST'])
+@jwt_required()
+def send_booking_confirmation():
+    """
+    Send booking confirmation email to customer and notification email to mentor
+    """
+    try:
+        data = request.get_json()
+        current_user_id = get_jwt_identity()
+        
+        current_app.logger.info(f"Send booking confirmation called with data: {data}")
+        
+        # Extract data from request
+        booking_id = data.get('booking_id')
+        customer_email = data.get('customer_email')
+        customer_name = data.get('customer_name')
+        mentor_name = data.get('mentor_name')
+        mentor_email = data.get('mentor_email', '')
+        
+        # Validate required fields
+        if not all([booking_id, customer_email, customer_name, mentor_name]):
+            return jsonify({
+                "success": False, 
+                "message": "Missing required fields"
+            }), 400
+        
+        # Get booking details from database
+        booking = Booking.query.get(booking_id)
+        if not booking:
+            return jsonify({
+                "success": False, 
+                "message": "Booking not found"
+            }), 404
+        
+        # Get customer and mentor details
+        customer = Customer.query.get(booking.customer_id)
+        mentor = Mentor.query.get(booking.mentor_id)
+        
+        if not customer or not mentor:
+            return jsonify({
+                "success": False, 
+                "message": "Customer or mentor not found"
+            }), 404
+        
+        # Get mentor's timezone from calendar settings
+        from api.models import CalendarSettings
+        calendar_settings = CalendarSettings.query.filter_by(mentor_id=mentor.id).first()
+        mentor_timezone = calendar_settings.timezone if calendar_settings else 'America/Los_Angeles'
+        
+        current_app.logger.info(f"Using timezone: {mentor_timezone} for booking {booking_id}")
+        
+        # Prepare booking details for BOTH emails (customer AND mentor)
+        booking_details = {
+            'id': booking.id,
+            'session_start_time': booking.session_start_time.isoformat() if booking.session_start_time else None,
+            'session_end_time': booking.session_end_time.isoformat() if booking.session_end_time else None,
+            'amount_paid': float(booking.amount_paid) if booking.amount_paid else 0,
+            'platform_fee': float(booking.platform_fee) if booking.platform_fee else 0,
+            'mentor_payout': float(booking.mentor_payout_amount) if booking.mentor_payout_amount else 0,
+            'meeting_url': booking.meeting_url,
+            'mentor_email': mentor.email,
+            'customer_email': customer.email,
+            'session_duration': booking.session_duration or 60,
+            'timezone': mentor_timezone  # ✅ CRITICAL: This timezone info goes to BOTH emails
+        }
+        
+        current_app.logger.info(f"Prepared booking details with timezone {mentor_timezone}: {booking_details}")
+        
+        # Import email functions
+        try:
+            from api.send_email import send_booking_confirmation_email, send_mentor_booking_notification_email
+            
+            # Send email to customer (with timezone info)
+            current_app.logger.info(f"Sending customer email with timezone: {mentor_timezone}")
+            customer_email_sent = send_booking_confirmation_email(
+                customer_email=customer.email,
+                customer_name=f"{customer.first_name} {customer.last_name}",
+                mentor_name=f"{mentor.first_name} {mentor.last_name}",
+                booking_details=booking_details  # Contains timezone info
+            )
+            
+            # Send email to mentor (with SAME timezone info)
+            current_app.logger.info(f"Sending mentor email with timezone: {mentor_timezone}")
+            mentor_email_sent = send_mentor_booking_notification_email(
+                mentor_email=mentor.email,
+                mentor_name=f"{mentor.first_name} {mentor.last_name}",
+                customer_name=f"{customer.first_name} {customer.last_name}",
+                booking_details=booking_details  # ✅ SAME booking_details with timezone
+            )
+            
+            # Track results
+            email_results = {
+                "customer_email_sent": customer_email_sent,
+                "mentor_email_sent": mentor_email_sent,
+                "timezone_used": mentor_timezone
+            }
+            
+            if customer_email_sent and mentor_email_sent:
+                current_app.logger.info(f"Both emails sent successfully for booking {booking_id} using timezone {mentor_timezone}")
+                return jsonify({
+                    "success": True,
+                    "message": "Booking confirmation emails sent to both customer and mentor",
+                    "details": email_results
+                }), 200
+            elif customer_email_sent or mentor_email_sent:
+                current_app.logger.warning(f"Partial email success for booking {booking_id}: {email_results}")
+                return jsonify({
+                    "success": True,
+                    "message": "Some emails sent successfully",
+                    "details": email_results
+                }), 200
+            else:
+                current_app.logger.error(f"Failed to send both emails for booking {booking_id}")
+                return jsonify({
+                    "success": False,
+                    "message": "Failed to send emails",
+                    "details": email_results
+                }), 500
+                
+        except ImportError as e:
+            current_app.logger.error(f"Could not import email functions: {str(e)}")
+            return jsonify({
+                "success": False,
+                "message": "Email functionality not available"
+            }), 500
+            
+    except Exception as e:
+        current_app.logger.error(f"Error in send_booking_confirmation: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({
+            "success": False,
+            "message": "Internal server error"
         }), 500

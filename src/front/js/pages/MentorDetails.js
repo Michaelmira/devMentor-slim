@@ -186,7 +186,44 @@ export const MentorDetails = () => {
                 // ✅ CREATE THE FULL MENTOR NAME HERE
                 const mentorFullName = `${mentor.first_name} ${mentor.last_name}`;
 
-                console.log('🎯 Navigating with mentor name:', mentorFullName);
+                // Get customer details for email
+                const customerData = store.currentUserData?.user_data;
+                const customerFullName = `${customerData?.first_name || ''} ${customerData?.last_name || ''}`.trim();
+                const customerEmail = customerData?.email;
+
+                console.log('🎯 Booking finalized successfully, sending confirmation email...');
+
+                // Send booking confirmation email with Google Calendar integration
+                try {
+                    const emailResponse = await fetch(process.env.BACKEND_URL + "/api/send-booking-confirmation", {
+                        method: "POST",
+                        headers: {
+                            'Content-Type': "application/json",
+                            'Authorization': `Bearer ${store.token}`
+                        },
+                        body: JSON.stringify({
+                            booking_id: result.booking.id,
+                            customer_email: customerEmail,
+                            customer_name: customerFullName,
+                            mentor_name: mentorFullName,
+                            mentor_email: mentor.email || '' // Add mentor email if available
+                        })
+                    });
+
+                    const emailResult = await emailResponse.json();
+
+                    if (emailResult.success) {
+                        console.log('✅ Booking confirmation email sent successfully');
+                    } else {
+                        console.warn('⚠️ Booking was created but email failed to send:', emailResult.message);
+                        // Don't block the user flow, but log the issue
+                    }
+                } catch (emailError) {
+                    console.error('❌ Error sending booking confirmation email:', emailError);
+                    // Continue with the booking flow even if email fails
+                }
+
+                console.log('🎯 Navigating to booking confirmed page with mentor name:', mentorFullName);
 
                 // Navigate to booking confirmed page with mentor info
                 navigate(`/booking-confirmed/${result.booking.id}`, {
