@@ -18,6 +18,7 @@ import { MentorProfile } from "./pages/MentorProfile";
 import { MentorDetails } from "./pages/MentorDetails";
 import { BookingDetailsPage } from "./pages/BookingDetailsPage";
 import { BookingConfirmedPage } from "./pages/BookingConfirmedPage";
+import LandingPage from "./pages/LandingPage";
 
 
 //create your first component
@@ -56,7 +57,7 @@ const Layout = () => {
                 <ScrollToTop>
                     <Navbar />
                     <Routes>
-                        <Route element={<Home />} path="/" />
+                        <Route element={<LandingPage />} path="/" />
                         <Route element={<MentorProfile />} path="/mentor-profile" />
                         <Route element={<Single />} path="/single/:theid" />
                         <Route element={<MentorList />} path="/mentor-list" />
