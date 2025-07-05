@@ -71,7 +71,6 @@ export const MentorProfile = () => {
     country: "",
     years_exp: "",
     skills: [],
-    days: [],
     price: null,
     about_me: "",
     calendly_url: "",
@@ -711,29 +710,6 @@ export const MentorProfile = () => {
                 />
               ) : (
                 mentor.skills?.join(", ")
-              )}
-            </dd>
-
-            <dt className="col-sm-4 form-label">Days Available:</dt>
-            <dd className="col-sm-8">
-              {editMode ? (
-                <Select
-                  isMulti
-                  name="days"
-                  options={daysOfTheWeek.filter(
-                    (day) => !mentor.days?.includes(day.label)
-                  )}
-                  className="basic-multi-select"
-                  classNamePrefix="select"
-                  closeMenuOnSelect={false}
-                  defaultValue={mentor.days?.map((day) => ({
-                    value: day,
-                    label: day,
-                  }))}
-                  onChange={handleSelectChange}
-                />
-              ) : (
-                mentor.days?.join(", ")
               )}
             </dd>
 

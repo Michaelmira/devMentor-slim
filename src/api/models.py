@@ -16,7 +16,7 @@ class Customer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     first_name = db.Column(db.String(30), unique=False, nullable=False)
     last_name = db.Column(db.String(30), unique=False, nullable=False)
-    phone = db.Column(db.String(30), unique=True, nullable=False, index=True)
+    phone = db.Column(db.String(30), nullable=False, index=True)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password = db.Column(db.String(256), unique=False, nullable=False)
     is_active = db.Column(db.Boolean(), unique=False,)
@@ -81,7 +81,6 @@ class Mentor(db.Model):
     about_me = db.Column(db.String(2500), unique=False)
     years_exp = db.Column(db.String(30), unique=False)
     skills = db.Column(MutableList.as_mutable(ARRAY(db.String(255))), default=list)
-    days = db.Column(MutableList.as_mutable(ARRAY(db.String(255))), default=list) ## Days Available 
     price = db.Column(db.Numeric(10,2), nullable=True)
     date_joined = db.Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     google_oauth_credentials = db.Column(db.Text, nullable=True)
@@ -96,6 +95,7 @@ class Mentor(db.Model):
         return f'<Mentor {self.email}>'
 
     def serialize(self):
+
         return {
             "id": self.id,
             "email": self.email,
@@ -111,7 +111,6 @@ class Mentor(db.Model):
             "country": self.country,
             "years_exp": self.years_exp,
             "skills": [skill for skill in self.skills] if self.skills is not None else [],
-            "days": [day for day in self.days] if self.days is not None else [],
             "profile_photo": self.profile_photo.serialize() if self.profile_photo else None,
             "portfolio_photos": [portfolio_photo.serialize() for portfolio_photo in self.portfolio_photos] if self.portfolio_photos is not None else [],
             "about_me": self.about_me,
@@ -217,7 +216,7 @@ class CalendarSettings(db.Model):
     buffer_time = db.Column(db.Integer, default=15)  # minutes between sessions
     advance_booking_days = db.Column(db.Integer, default=30)  # how far in advance can book
     minimum_notice_hours = db.Column(db.Integer, default=24)  # minimum hours before booking
-    timezone = db.Column(db.String(50), default='America/Los_Angeles')
+    timezone = db.Column(db.String(50), default='America/New_York')  # Change from Los_Angeles
     
     mentor = relationship("Mentor", backref=db.backref("calendar_settings", uselist=False))
     
@@ -239,6 +238,7 @@ class BookingStatus(PyEnum):
     CANCELLED_BY_MENTOR = "cancelled_by_mentor"
     COMPLETED = "completed"
     REFUNDED = "refunded"
+    REQUIRES_RATING = "requires_rating" 
 
 class Booking(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -283,6 +283,15 @@ class Booking(db.Model):
     mentor = relationship("Mentor", backref=db.backref("bookings", lazy=True))
     customer = relationship("Customer", backref=db.backref("bookings", lazy=True))
 
+    # NEW RATING SYSTEM FIELDS 
+    customer_rating = db.Column(db.Integer, nullable=True)  # 1-5 stars
+    customer_notes = db.Column(db.Text, nullable=True)     # Admin-only
+    mentor_notes = db.Column(db.Text, nullable=True)       # Admin-only
+    rating_submitted_at = db.Column(DateTime(timezone=True), nullable=True)
+
+    flagged_by_customer = db.Column(db.Boolean, default=False, nullable=False)
+    flagged_by_mentor = db.Column(db.Boolean, default=False, nullable=False)
+
     def __repr__(self):
         return f'<Booking {self.id} - Mentor: {self.mentor_id} Customer: {self.customer_id} Status: {self.status.value}>'
 
@@ -290,24 +299,36 @@ class Booking(db.Model):
         return {
             "id": self.id,
             "customer_name": self.customer.first_name + " " + self.customer.last_name if self.customer else "N/A",
-            "scheduled_at": self.session_start_time.isoformat() if self.session_start_time else None,
+            "session_start_time": self.session_start_time.isoformat() if self.session_start_time else None,
+            "session_end_time": self.session_end_time.isoformat() if self.session_end_time else None,
+            "session_duration": self.session_duration,
+            "timezone": self.timezone,
             "status": self.status.value,
-            "amount_paid": str(self.amount_paid),
-            "mentor_payout_amount": str(self.mentor_payout_amount),
+            "customer_rating": self.customer_rating,
+            "rating_submitted_at": self.rating_submitted_at.isoformat() if self.rating_submitted_at else None,
+            "amount_paid": str(self.amount_paid) if self.amount_paid else None,
+            "mentor_payout_amount": str(self.mentor_payout_amount) if self.mentor_payout_amount else None,
             "google_meet_link": self.google_meet_link,
             "meeting_id": self.meeting_id,
             "meeting_url": self.meeting_url,
-            "has_recording": bool(self.recording_url)
+            "has_recording": bool(self.recording_url),
+            "invitee_name": self.invitee_name,
+            "invitee_email": self.invitee_email,
+            "invitee_notes": self.invitee_notes,
+            "flagged_by_customer": self.flagged_by_customer,
+            "flagged_by_mentor": self.flagged_by_mentor
         }
 
     def serialize_for_customer(self):
         return {
             "id": self.id,
             "mentor_name": self.mentor.first_name + " " + self.mentor.last_name if self.mentor else "N/A",
+            "mentor_id": self.mentor_id,
             "session_start_time": self.session_start_time.isoformat() if self.session_start_time else None,
             "session_end_time": self.session_end_time.isoformat() if self.session_end_time else None,
             "session_duration": self.session_duration,
             "status": self.status.value,
+            "customer_rating": self.customer_rating,
             "amount_paid": str(self.amount_paid),
             "google_meet_link": self.google_meet_link,
             "invitee_name": self.invitee_name,
@@ -316,7 +337,9 @@ class Booking(db.Model):
             "timezone": self.timezone,
             "meeting_id": self.meeting_id,
             "meeting_url": self.meeting_url,
-            "has_recording": bool(self.recording_url)
+            "has_recording": bool(self.recording_url),
+            "flagged_by_customer": self.flagged_by_customer,
+            "flagged_by_mentor": self.flagged_by_mentor
         }
 
     def serialize(self):
