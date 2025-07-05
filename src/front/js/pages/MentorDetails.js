@@ -9,6 +9,7 @@ import { VerifyCodeModal } from '../auth/VerifyCodeModal';
 import { MVPGoogleOAuthButton } from '../auth/MVPGoogelOAuthButton';
 import { MVPGitHubOAuthButton } from '../auth/MVPGitHubOAuthButton';
 import { PaymentForm } from '../component/PaymentForm';
+import RatingDisplay from "../component/RatingDisplay";
 import './MentorDetails.css';
 
 export const MentorDetails = () => {
@@ -45,11 +46,13 @@ export const MentorDetails = () => {
         if ((mvpGoogleAuth === 'success' || mvpGithubAuth === 'success') && token && userId && userType === 'customer') {
             console.log("Detected OAuth redirect, processing authentication");
 
-            // Process the OAuth verification
             const processOAuth = async () => {
                 try {
-                    const authAction = mvpGoogleAuth === 'success' ? 'verifyMVPGoogleAuth' : 'verifyMVPGitHubAuth';
-                    const result = await actions[authAction]({
+                    const authAction = mvpGoogleAuth === 'success'
+                        ? actions.verifyMVPGoogleAuth
+                        : actions.verifyMVPGitHubAuth;
+
+                    const result = await authAction({
                         token,
                         user_id: userId,
                         user_type: userType
@@ -57,27 +60,27 @@ export const MentorDetails = () => {
 
                     if (result.success) {
                         console.log("OAuth verification successful");
+
+                        // 🔥 ADD THIS: Restore the selected time slot from sessionStorage
+                        const pendingTimeSlot = sessionStorage.getItem('pendingTimeSlot');
+                        if (pendingTimeSlot) {
+                            try {
+                                const timeSlot = JSON.parse(pendingTimeSlot);
+                                setSelectedTimeSlot(timeSlot);
+                                sessionStorage.removeItem('pendingTimeSlot'); // Clean up
+                                console.log("Restored time slot from storage:", timeSlot);
+                            } catch (e) {
+                                console.error("Failed to parse pending time slot:", e);
+                            }
+                        }
+
                         // Clean URL
                         window.history.replaceState({}, '', window.location.pathname);
 
-                        // Check if we have a pending booking
-                        const pendingSlot = sessionStorage.getItem('pendingTimeSlot');
-                        if (pendingSlot) {
-                            setSelectedTimeSlot(JSON.parse(pendingSlot));
-                            sessionStorage.removeItem('pendingTimeSlot');
-                            setShowCalendar(false);
-                            setShowPaymentForm(true);
-
-                            // Scroll to booking section after state updates
-                            setTimeout(() => {
-                                if (bookingSectionRef.current) {
-                                    bookingSectionRef.current.scrollIntoView({
-                                        behavior: 'smooth',
-                                        block: 'start'
-                                    });
-                                }
-                            }, 100); // Small delay to ensure DOM updates
-                        }
+                        // Move to payment
+                        setShowCalendar(false);
+                        setShowAuthForm(false);
+                        setShowPaymentForm(true);
                     } else {
                         console.error("OAuth verification failed:", result.message);
                         alert(result.message || "Authentication failed. Please try again.");
@@ -87,7 +90,6 @@ export const MentorDetails = () => {
                     alert("An error occurred during authentication. Please try again.");
                 }
             };
-
             setTimeout(processOAuth, 100);
         }
     }, [actions]);
@@ -128,8 +130,19 @@ export const MentorDetails = () => {
         }
     };
 
+    // UPDATED: Enhanced time slot selection with customer timezone support
     const handleTimeSlotSelected = (slot) => {
-        setSelectedTimeSlot(slot);
+        console.log("Time slot selected with timezone data:", slot);
+
+        // Ensure the slot has all timezone information
+        const enhancedSlot = {
+            ...slot,
+            // Make sure we have customer timezone (should come from calendar widget)
+            customer_timezone: slot.customer_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+            mentor_timezone: slot.mentor_timezone
+        };
+
+        setSelectedTimeSlot(enhancedSlot);
 
         // Check if user is logged in
         if (store.token && store.customerId) {
@@ -138,8 +151,8 @@ export const MentorDetails = () => {
             setShowPaymentForm(true);
         } else {
             // User needs to authenticate
-            // Save the slot to sessionStorage in case of OAuth redirect
-            sessionStorage.setItem('pendingTimeSlot', JSON.stringify(slot));
+            // Save the enhanced slot to sessionStorage in case of OAuth redirect
+            sessionStorage.setItem('pendingTimeSlot', JSON.stringify(enhancedSlot));
             setShowCalendar(false);
             setShowAuthForm(true);
         }
@@ -151,50 +164,93 @@ export const MentorDetails = () => {
         setShowPaymentForm(true);
     };
 
-    const handleSignupSuccess = (email) => {
+    const handleSignupSuccess = () => {
+        setShowAuthForm(false);
+        setShowVerifyCode(true);
+    };
+
+    const handleSignupNeedsVerification = (email) => {
         setEmailForVerification(email);
         setShowAuthForm(false);
         setShowVerifyCode(true);
     };
 
-    const handleVerificationComplete = () => {
+    const handleVerificationSuccess = () => {
         setShowVerifyCode(false);
-        setActiveAuthTab('login');
-        setShowAuthForm(true);
-    };
-
-    const handleMVPOAuthSuccess = (result) => {
-        console.log("MVP OAuth success, proceeding to payment");
-        setShowAuthForm(false);
         setShowPaymentForm(true);
     };
 
+    // UPDATED: Enhanced payment success handler with customer timezone
     const handlePaymentSuccess = async (paymentIntent) => {
+        console.log("Payment successful:", paymentIntent);
+        console.log("Selected time slot with timezone:", selectedTimeSlot);
+
         try {
+            // Prepare booking data with customer timezone
             const bookingData = {
                 mentorId: mentor.id,
                 sessionStartTime: selectedTimeSlot.start_time,
                 sessionEndTime: selectedTimeSlot.end_time,
+                customer_timezone: selectedTimeSlot.customer_timezone, // ✅ ADD CUSTOMER TIMEZONE
+                mentor_timezone: selectedTimeSlot.mentor_timezone,     // ✅ ADD MENTOR TIMEZONE  
                 paymentIntentId: paymentIntent.id,
-                amountPaid: paymentIntent.amount / 100, // Convert from cents
-                notes: ''
+                amountPaid: paymentIntent.amount / 100, // Convert cents to dollars
+                notes: "" // Can be added later if needed
             };
 
+            console.log("Finalizing booking with timezone data:", bookingData);
+
+            // Call the finalize booking action
             const result = await actions.finalizeBooking(bookingData);
 
             if (result.success) {
-                // ✅ CREATE THE FULL MENTOR NAME HERE
+                console.log("Booking finalized successfully!");
+
+                // Prepare names for email
+                const customerFullName = `${store.currentUserData?.user_data?.first_name || ''} ${store.currentUserData?.user_data?.last_name || ''}`.trim();
                 const mentorFullName = `${mentor.first_name} ${mentor.last_name}`;
+                const customerEmail = store.currentUserData?.user_data?.email;
 
-                console.log('🎯 Navigating with mentor name:', mentorFullName);
+                // Send booking confirmation email
+                try {
+                    const emailResponse = await fetch(`${process.env.BACKEND_URL}/api/send-booking-confirmation`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${store.token}`
+                        },
+                        body: JSON.stringify({
+                            booking_id: result.booking.id,
+                            customer_email: customerEmail,
+                            customer_name: customerFullName,
+                            mentor_name: mentorFullName,
+                            mentor_email: mentor.email || '',
+                            customer_timezone: selectedTimeSlot.customer_timezone // ✅ PASS CUSTOMER TIMEZONE TO EMAIL
+                        })
+                    });
 
-                // Navigate to booking confirmed page with mentor info
+                    const emailResult = await emailResponse.json();
+
+                    if (emailResult.success) {
+                        console.log('✅ Booking confirmation email sent successfully with timezone:', selectedTimeSlot.customer_timezone);
+                    } else {
+                        console.warn('⚠️ Booking was created but email failed to send:', emailResult.message);
+                    }
+                } catch (emailError) {
+                    console.error('❌ Error sending booking confirmation email:', emailError);
+                }
+
+                console.log('🎯 Navigating to booking confirmed page');
+
+                // Navigate to booking confirmed page
                 navigate(`/booking-confirmed/${result.booking.id}`, {
                     state: {
-                        mentorName: mentorFullName,  // ✅ This will fix "Your Mentor"
+                        mentorName: mentorFullName,
                         mentorId: mentor.id,
                         sessionStartTime: selectedTimeSlot.start_time,
                         sessionEndTime: selectedTimeSlot.end_time,
+                        customerTimezone: selectedTimeSlot.customer_timezone,
+                        mentorTimezone: selectedTimeSlot.mentor_timezone,
                         amountPaid: paymentIntent.amount / 100,
                         bookingId: result.booking.id
                     }
@@ -242,74 +298,43 @@ export const MentorDetails = () => {
             <div className="container mt-5">
                 <div className="alert alert-warning">
                     <h4 className="alert-heading">Mentor Not Found</h4>
-                    <p>We couldn't find the mentor you're looking for. They may no longer be available.</p>
-                    <hr />
-                    <div className="d-flex justify-content-between">
-                        <Link to="/mentor-list" className="btn btn-primary">
-                            Return to Mentor List
-                        </Link>
-                    </div>
+                    <p>We couldn't find the mentor you're looking for. This might be because:</p>
+                    <ul>
+                        <li>The mentor profile doesn't exist</li>
+                        <li>The URL is incorrect</li>
+                        <li>The mentor has been removed</li>
+                    </ul>
+                    <Link to="/" className="btn btn-primary">
+                        Browse All Mentors
+                    </Link>
                 </div>
             </div>
         );
     }
 
-    const renderBookingStep = () => {
-        if (showCalendar) {
+    // Render booking flow based on current state
+    const renderBookingFlow = () => {
+        if (showVerifyCode) {
             return (
-                <BookingCalendarWidget
-                    mentorId={mentor.id}
-                    mentorName={`${mentor.first_name} ${mentor.last_name}`}
-                    onSelectSlot={handleTimeSlotSelected}
-                    backendUrl={process.env.BACKEND_URL}
-                />
-            );
-        } else if (showVerifyCode) {
-            return (
-                <div className="card border-0 shadow p-4">
+                <div className="card">
                     <div className="card-body">
+                        <h4 className="card-title">Verify Your Email</h4>
                         <VerifyCodeModal
+                            show={showVerifyCode}
                             email={emailForVerification}
-                            onClose={handleCancel}
-                            switchToLogin={handleVerificationComplete}
+                            onVerifySuccess={handleVerificationSuccess}
+                            onCancel={handleCancel}
                         />
-                        <div className="text-center mt-3">
-                            <button className="btn btn-secondary" onClick={handleCancel}>
-                                Back to Calendar
-                            </button>
-                        </div>
                     </div>
                 </div>
             );
-        } else if (showAuthForm) {
+        }
+
+        if (showAuthForm) {
             return (
-                <div className="card border-0 shadow p-4">
+                <div className="card">
                     <div className="card-body">
-                        <h4 className="text-center mb-4">Authentication Required</h4>
-
-                        {/* MVP OAuth Buttons */}
-                        <div className="mb-4">
-                            <MVPGoogleOAuthButton
-                                mentor={mentor}
-                                onSuccess={handleMVPOAuthSuccess}
-                                buttonText={activeAuthTab === 'login' ? 'Login with Google' : 'Sign up with Google'}
-                            />
-
-                            <MVPGitHubOAuthButton
-                                mentor={mentor}
-                                onSuccess={handleMVPOAuthSuccess}
-                                buttonText={activeAuthTab === 'login' ? 'Login with GitHub' : 'Sign up with GitHub'}
-                            />
-
-                            <div className="d-flex align-items-center my-3">
-                                <hr className="flex-grow-1" />
-                                <span className="px-3 text-secondary">or</span>
-                                <hr className="flex-grow-1" />
-                            </div>
-                        </div>
-
-                        {/* Auth tabs */}
-                        <ul className="nav nav-tabs mb-4">
+                        <ul className="nav nav-tabs mb-3" role="tablist">
                             <li className="nav-item">
                                 <button
                                     className={`nav-link ${activeAuthTab === 'login' ? 'active' : ''}`}
@@ -328,55 +353,62 @@ export const MentorDetails = () => {
                             </li>
                         </ul>
 
-                        {/* Auth forms */}
-                        {activeAuthTab === 'login' ? (
-                            <CustomerLogin
-                                onSuccess={handleLoginSuccess}
-                                switchToSignUp={() => setActiveAuthTab('signup')}
-                                onForgotPs={() => { }}
-                            />
-                        ) : (
-                            <CustomerSignup
-                                switchToLogin={() => setActiveAuthTab('login')}
-                                onSignupSuccess={handleSignupSuccess}
-                            />
-                        )}
-
-                        <div className="text-center mt-3">
-                            <button className="btn btn-secondary" onClick={handleCancel}>
-                                Back to Calendar
-                            </button>
+                        <div className="tab-content">
+                            {activeAuthTab === 'login' ? (
+                                <>
+                                    <CustomerLogin
+                                        onLoginSuccess={handleLoginSuccess}
+                                        onCancel={handleCancel}
+                                    />
+                                    <div className="text-center mt-3">
+                                        <p className="mb-2">Or sign in with:</p>
+                                        <div className="d-flex gap-2 justify-content-center">
+                                            <MVPGoogleOAuthButton userType="customer" />
+                                            <MVPGitHubOAuthButton userType="customer" />
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <CustomerSignup
+                                        onSignupSuccess={handleSignupSuccess}
+                                        onSignupNeedsVerification={handleSignupNeedsVerification}
+                                        onCancel={handleCancel}
+                                    />
+                                    <div className="text-center mt-3">
+                                        <p className="mb-2">Or sign up with:</p>
+                                        <div className="d-flex gap-2 justify-content-center">
+                                            <MVPGoogleOAuthButton userType="customer" />
+                                            <MVPGitHubOAuthButton userType="customer" />
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
             );
-        } else if (showPaymentForm) {
+        }
+
+        if (showPaymentForm) {
             return (
-                <div className="card border-0 shadow p-4">
+                <div className="card">
                     <div className="card-body">
-                        <h4 className="text-center mb-4">Complete Your Booking</h4>
+                        <h4 className="card-title">Complete Your Booking</h4>
 
                         {selectedTimeSlot && (
                             <div className="mb-4">
                                 <h6>Session Details:</h6>
                                 <p className="mb-1">
-                                    <strong>Date:</strong> {new Date(selectedTimeSlot.start_time).toLocaleDateString('en-US', {
-                                        weekday: 'long',
-                                        year: 'numeric',
-                                        month: 'long',
-                                        day: 'numeric'
-                                    })}
+                                    <strong>Date:</strong> {selectedTimeSlot.formatted_date}
                                 </p>
                                 <p className="mb-1">
-                                    <strong>Time:</strong> {new Date(selectedTimeSlot.start_time).toLocaleTimeString('en-US', {
-                                        hour: 'numeric',
-                                        minute: '2-digit',
-                                        hour12: true
-                                    })} - {new Date(selectedTimeSlot.end_time).toLocaleTimeString('en-US', {
-                                        hour: 'numeric',
-                                        minute: '2-digit',
-                                        hour12: true
-                                    })}
+                                    <strong>Time:</strong> {selectedTimeSlot.formatted_start_time} - {selectedTimeSlot.formatted_end_time}
+                                    {selectedTimeSlot.customer_timezone && (
+                                        <small className="text-muted ms-2">
+                                            (Your local time)
+                                        </small>
+                                    )}
                                 </p>
                                 <p className="mb-1">
                                     <strong>Duration:</strong> {selectedTimeSlot.duration} minutes
@@ -387,6 +419,7 @@ export const MentorDetails = () => {
 
                         <PaymentForm
                             mentor={mentor}
+                            selectedTimeSlot={selectedTimeSlot}
                             onSuccess={handlePaymentSuccess}
                             onCancel={handleCancel}
                         />
@@ -394,200 +427,201 @@ export const MentorDetails = () => {
                 </div>
             );
         }
+
+        // Default: Show calendar
+        return (
+            <div className="card">
+                <div className="card-body">
+                    <h4 className="card-title">Select a Time Slot</h4>
+                    <BookingCalendarWidget
+                        mentorId={mentor.id}
+                        mentorName={`${mentor.first_name} ${mentor.last_name}`}
+                        onSelectSlot={handleTimeSlotSelected}
+                        backendUrl={process.env.BACKEND_URL}
+                    />
+                </div>
+            </div>
+        );
     };
 
     return (
-        <div className="container mt-5 mb-5">
-            <div className="row">
-                <div className="col-md-4">
-                    <div className="card">
-                        <div className="card-body text-center">
-                            {mentor.profile_photo ? (
-                                <img
-                                    src={mentor.profile_photo.image_url}
-                                    alt={`${mentor.first_name} ${mentor.last_name}`}
-                                    className="rounded-circle img-fluid mb-3"
-                                    style={{ width: "200px", height: "200px", objectFit: "cover" }}
-                                />
-                            ) : (
-                                <div className="rounded-circle bg-secondary d-flex align-items-center justify-content-center mx-auto mb-3" style={{ width: "200px", height: "200px" }}>
-                                    <span className="text-white h1">
-                                        {mentor.first_name[0]}{mentor.last_name[0]}
-                                    </span>
-                                </div>
-                            )}
-                            <h3>{mentor.first_name} {mentor.last_name}</h3>
-                            {mentor.nick_name && <p className="text-muted">"{mentor.nick_name}"</p>}
+        <div className="mentor-details-page">
+            <div className="container mt-5 mb-5">
 
-                            <div className="d-grid gap-2">
+                <div className="row">
+                    <div className="col-md-4">
+                        {/* Profile Card */}
+                        <div className="card">
+                            <div className="card-body text-center">
+                                {mentor.profile_photo ? (
+                                    <img
+                                        src={mentor.profile_photo.image_url}  // ✅ This is correct
+                                        alt={`${mentor.first_name} ${mentor.last_name}`}
+                                        className="rounded-circle mb-3"
+                                        style={{ width: '150px', height: '150px', objectFit: 'cover' }}
+                                    />
+                                ) : (
+                                    <div
+                                        className="rounded-circle mb-3 d-flex align-items-center justify-content-center bg-secondary text-white"
+                                        style={{ width: '150px', height: '150px', margin: '0 auto' }}
+                                    >
+                                        <span style={{ fontSize: '48px' }}>
+                                            {mentor.first_name?.[0]}{mentor.last_name?.[0]}
+                                        </span>
+                                    </div>
+                                )}
+                                <h3>{mentor.first_name} {mentor.last_name}</h3>
+                                {mentor.nick_name && (
+                                    <p className="text-muted">"{mentor.nick_name}"</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Contact & Location Info */}
+                        <div className="card mt-3 mb-3 ">
+                            <div className="card-header">
+                                <h5 className="mb-0">Contact & Location</h5>
+                            </div>
+                            <div className="card-body">
+                                <ul className="list-unstyled">
+                                    <li className="mb-2">
+                                        <MapPin size={16} className="me-2 text-muted" />
+                                        {mentor.city}, {mentor.what_state}
+                                        {mentor.country && (
+                                            <><br /><small className="text-muted ms-4">{mentor.country}</small></>
+                                        )}
+                                    </li>
+                                    {mentor.email && (
+                                        <li className="mb-2">
+                                            <Mail size={16} className="me-2 text-muted" />
+                                            <a href={`mailto:${mentor.email}`} className="text-decoration-none">
+                                                {mentor.email}
+                                            </a>
+                                        </li>
+                                    )}
+                                    {mentor.phone && (
+                                        <li className="mb-2">
+                                            <Phone size={16} className="me-2 text-muted" />
+                                            <a href={`tel:${mentor.phone}`} className="text-decoration-none">
+                                                {mentor.phone}
+                                            </a>
+                                        </li>
+                                    )}
+                                </ul>
+
+
+                            </div>
+                        </div>
+
+                        {/* ADD THIS LINE HERE */}
+                        <RatingDisplay mentorId={mentor.id} showInSidebar={false} />
+
+                        {/* Experience & Pricing */}
+                        <div className="card mt-3">
+                            <div className="card-header">
+                                <h5 className="mb-0">Experience & Pricing</h5>
+                            </div>
+                            <div className="card-body">
+                                <ul className="list-unstyled">
+                                    {mentor.years_exp && (
+                                        <li className="mb-2">
+                                            <Award size={16} className="me-2 text-muted" />
+                                            {mentor.years_exp} years experience
+                                        </li>
+                                    )}
+                                    {mentor.price && (
+                                        <li className="mb-2">
+                                            <DollarSign size={16} className="me-2 text-muted" />
+                                            ${mentor.price}/hour
+                                        </li>
+                                    )}
+                                </ul>
                                 <button
-                                    className="btn btn-primary"
+                                    className="btn btn-primary btn-lg w-100 mt-3"
                                     onClick={handleBookSession}
                                 >
+                                    <Calendar size={20} className="me-2" />
                                     Book a Session
                                 </button>
                             </div>
                         </div>
 
-                        <ul className="list-group list-group-flush">
-                            <li className="list-group-item">
-                                <MapPin className="me-2" size={18} />
-                                {mentor.city}, {mentor.what_state}, {mentor.country}
-                            </li>
-                            <li className="list-group-item">
-                                <DollarSign className="me-2" size={18} />
-                                ${mentor.price}/session
-                            </li>
-                            <li className="list-group-item">
-                                <Award className="me-2" size={18} />
-                                {mentor.years_exp} years of experience
-                            </li>
-                        </ul>
-                    </div>
-
-                    {/* Skills Section */}
-                    <div className="card mt-4">
-                        <div className="card-header">
-                            <h5 className="mb-0">Skills & Expertise</h5>
-                        </div>
-                        <div className="card-body">
-                            <div className="d-flex flex-wrap gap-2">
-                                {mentor.skills && mentor.skills.map((skill, index) => (
-                                    <span key={index} className="badge bg-primary">{skill}</span>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="col-md-8">
-                    {/* About Section */}
-                    <div className="card mb-4">
-                        <div className="card-header">
-                            <h5 className="mb-0">About Me</h5>
-                        </div>
-                        <div className="card-body">
-                            <p style={{ whiteSpace: 'pre-line' }}>{mentor.about_me}</p>
-                        </div>
-                    </div>
-
-                    {/* Portfolio Section */}
-                    {mentor.portfolio_photos && mentor.portfolio_photos.length > 0 && (
-                        <div className="card mb-4">
-                            <div className="card-header">
-                                <h5 className="mb-0">Portfolio</h5>
-                            </div>
-                            <div className="card-body">
-                                <div className="row g-3">
-                                    {mentor.portfolio_photos.map((photo, index) => (
-                                        <div key={index} className="col-md-4">
-                                            <img
-                                                src={photo.image_url}
-                                                alt={`Portfolio ${index + 1}`}
-                                                className="img-fluid rounded cursor-pointer"
-                                                onClick={() => openPortfolioModal(photo.image_url)}
-                                                style={{ cursor: 'pointer', height: '200px', width: '100%', objectFit: 'cover' }}
-                                            />
-                                        </div>
-                                    ))}
+                        {/* Skills Section */}
+                        {mentor.skills && mentor.skills.length > 0 && (
+                            <div className="card mt-3">
+                                <div className="card-header">
+                                    <h5 className="mb-0">Skills & Expertise</h5>
+                                </div>
+                                <div className="card-body">
+                                    <div className="d-flex flex-wrap gap-2">
+                                        {(Array.isArray(mentor.skills)
+                                            ? mentor.skills
+                                            : mentor.skills.split(',')
+                                        ).map((skill, index) => (
+                                            <span key={index} className="badge bg-primary">
+                                                {typeof skill === 'string' ? skill.trim() : skill}
+                                            </span>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
 
-                    {/* Booking Section */}
-                    <div ref={bookingSectionRef} className="card mb-4">
-                        <div className="card-header">
-                            <h5 className="mb-0">Book a Session</h5>
+                    <div className="col-md-8">
+                        {/* About Section */}
+                        <div className="card mb-4">
+                            <div className="card-header">
+                                <h5 className="mb-0">About {mentor.first_name}</h5>
+                            </div>
+                            <div className="card-body">
+                                <p style={{ whiteSpace: 'pre-line' }}>
+                                    {mentor.about_me || 'No description provided.'}
+                                </p>
+                            </div>
                         </div>
-                        <div className="card-body">
-                            {renderBookingStep()}
+
+                        {/* Portfolio Section */}
+                        {mentor.portfolio_photos && mentor.portfolio_photos.length > 0 && (
+                            <div className="card mb-4">
+                                <div className="card-header">
+                                    <h5 className="mb-0">Portfolio</h5>
+                                </div>
+                                <div className="card-body">
+                                    <div className="portfolio-thumbnails-grid">
+                                        {mentor.portfolio_photos.map((photo, index) => (
+                                            <img
+                                                key={index}
+                                                src={photo.image_url}
+                                                alt={`Portfolio ${index + 1}`}
+                                                className="portfolio-thumbnail"
+                                                onClick={() => openPortfolioModal(photo.image_url)}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Booking Section */}
+                        <div ref={bookingSectionRef}>
+                            {renderBookingFlow()}
                         </div>
                     </div>
                 </div>
+
+                {/* Portfolio Modal */}
+                {showPortfolioModal && (
+                    <div className="portfolio-modal" onClick={closePortfolioModal}>
+                        <span className="portfolio-modal-close" onClick={closePortfolioModal}>
+                            &times;
+                        </span>
+                        <img className="portfolio-modal-content" src={selectedPortfolioImage} alt="Portfolio" />
+                    </div>
+                )}
             </div>
-
-            {/* Portfolio Modal */}
-        // Replace your existing Portfolio Modal section with this:
-
-            {/* Full-Screen Portfolio Modal */}
-            {showPortfolioModal && (
-                <div
-                    className="modal fade show"
-                    style={{
-                        display: 'block',
-                        zIndex: 9999
-                    }}
-                    tabIndex="-1"
-                    onClick={closePortfolioModal} // Click anywhere to close
-                >
-                    <div
-                        className="modal-dialog"
-                        style={{
-                            maxWidth: '100vw',
-                            width: '100vw',
-                            height: '100vh',
-                            margin: 0,
-                            padding: 0
-                        }}
-                        onClick={(e) => e.stopPropagation()} // Prevent closing when clicking on image
-                    >
-                        <div
-                            className="modal-content"
-                            style={{
-                                height: '100vh',
-                                border: 'none',
-                                borderRadius: 0,
-                                backgroundColor: 'rgba(0, 0, 0, 0.95)'
-                            }}
-                        >
-                            <div
-                                className="modal-header"
-                                style={{
-                                    position: 'absolute',
-                                    top: '20px',
-                                    right: '20px',
-                                    border: 'none',
-                                    background: 'transparent',
-                                    zIndex: 10000
-                                }}
-                            >
-                                <button
-                                    type="button"
-                                    className="btn-close btn-close-white"
-                                    onClick={closePortfolioModal}
-                                    style={{
-                                        fontSize: '1.5rem',
-                                        opacity: 0.8
-                                    }}
-                                ></button>
-                            </div>
-                            <div
-                                className="modal-body d-flex align-items-center justify-content-center"
-                                style={{
-                                    height: '100vh',
-                                    padding: '40px 20px'
-                                }}
-                            >
-                                <img
-                                    src={selectedPortfolioImage}
-                                    alt="Portfolio"
-                                    style={{
-                                        maxWidth: '100%',
-                                        maxHeight: '100%',
-                                        objectFit: 'contain',
-                                        cursor: 'pointer'
-                                    }}
-                                    onClick={closePortfolioModal} // Also allow clicking image to close
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
-
 
 export default MentorDetails;

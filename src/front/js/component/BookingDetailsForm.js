@@ -159,7 +159,7 @@ export const BookingDetailsForm = ({ mentorId, calendlyEventData, paymentIntentD
                         aria-describedby="notesHelp"
                     ></textarea>
                     <div id="notesHelp" className="form-text">E.g., specific questions, topics you'd like to cover, or links to your work.</div>
-                </div>
+                </div> 
 
                 <hr className="my-4" />
 
