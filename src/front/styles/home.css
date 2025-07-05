@@ -3,14 +3,15 @@
   }
   
   .hero {
-    background-image: url('https://res.cloudinary.com/dufs8hbca/image/upload/w_1000,ar_16:9,c_fill,g_auto,e_sharpen/v1725933624/Saved/ChickTeachingDude_ocwdax.jpg');
+    /* background-image: url('https://res.cloudinary.com/dufs8hbca/image/upload/w_1000,ar_16:9,c_fill,g_auto,e_sharpen/v1725933624/Saved/ChickTeachingDude_ocwdax.jpg'); */
+    background-image: url('https://i.ibb.co/Qvrcqdm5/9273409b-c53c-4bf3-83d5-4650ffe95727.png');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
     color: white;
     padding: 100px 0;
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-    border-radius: 10px;
+  margin-bottom: 80px;
   }
   
   .hero h1 {
@@ -86,8 +87,34 @@
   
   .featured-mentors {
     background-color: #f8f9fa;
-    padding: 80px 0;
+    
   }
+
+
+
+.featured-carousel-btn {
+  background-color: rgba(0, 0, 0, 0.7); 
+  border-radius: 50%;
+  width: 3rem;
+  height: 3rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+
+.featured-carousel-btn:hover {
+  background-color: rgba(0, 0, 0, 0.85);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+}
+
+
+.featured-carousel-icon-dark {
+  filter: brightness(0) invert(1); 
+}
+
+
+
+
   
   .mentor-stats {
     display: flex;

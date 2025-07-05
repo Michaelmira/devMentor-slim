@@ -18,6 +18,7 @@ import { MentorProfile } from "./pages/MentorProfile";
 import { MentorDetails } from "./pages/MentorDetails";
 import { BookingDetailsPage } from "./pages/BookingDetailsPage";
 import { BookingConfirmedPage } from "./pages/BookingConfirmedPage";
+import LandingPage from "./pages/LandingPage";
 import CustomerDashboard from "./pages/CustomerDashboard";
 import CustomerProfile from "./pages/CustomerProfile";
 import { VideoMeetingPage } from "./pages/VideoMeetingPage";
@@ -71,7 +72,10 @@ const Layout = () => {
                 <ScrollToTop>
                     <Navbar />
                     <Routes>
-                        <Route element={<Home />} path="/" />
+                        <Route element={<LandingPage />} path="/" />
+                        <Route element={<MentorProfile />} path="/mentor-profile" />
+                        <Route element={<Single />} path="/single/:theid" />
+                        {/* <Route element={<Home />} path="/" /> */}
                         <Route element={<MentorList />} path="/mentor-list" />
                         <Route element={<MentorDetails />} path="/mentor-details/:theid" />
                         <Route element={<CustomerProfile />} path="/customer-profile" />
