@@ -3,7 +3,7 @@ import React, { useContext } from 'react';
 import { Context } from "../store/appContext";
 import { StripePaymentComponent } from "./StripePaymentComponent";
 
-export const PaymentForm = ({ mentor, paidDateTime, onSuccess, onCancel }) => {
+export const PaymentForm = ({ mentor, paidDateTime, sessionDuration, onSuccess, onCancel }) => {
   const { store } = useContext(Context);
 
   // Get the current user data
@@ -30,22 +30,27 @@ export const PaymentForm = ({ mentor, paidDateTime, onSuccess, onCancel }) => {
   const sessionAmount = parseFloat(mentor?.price || 0);
 
   // Debug output
-  console.log("Customer data:", {
-    id: userData.id,
-    name: `${userData.first_name || ''} ${userData.last_name || ''}`,
-    email: userData.email
+  console.log("Payment form data:", {
+    customer: {
+      id: userData.id,
+      name: `${userData.first_name || ''} ${userData.last_name || ''}`,
+      email: userData.email
+    },
+    mentor: {
+      id: mentor.id,
+      name: `${mentor.first_name} ${mentor.last_name}`,
+      price: sessionAmount
+    },
+    session: {
+      dateTime: paidDateTime,
+      duration: sessionDuration || mentor.session_duration || 60
+    }
   });
 
   return (
     <div className="payment-form-container">
-      <div className="session-details mb-4">
-        <h4 className="text-center mb-3">Session Details</h4>
-        <p><strong>Mentor:</strong> {mentor.first_name} {mentor.last_name}</p>
-        <p><strong>Date/Time:</strong> {new Date(paidDateTime).toLocaleString()}</p>
-        <p><strong>Session Duration:</strong> {mentor.session_duration || 60} minutes</p>
-        <p><strong>Amount:</strong> ${sessionAmount.toFixed(2)}</p>
-      </div>
-
+      {/* Removed duplicate session details since they're shown in MentorDetails.js */}
+      
       <div className="stripe-payment-wrapper">
         <StripePaymentComponent
           customerId={userData.id?.toString()}
@@ -64,7 +69,7 @@ export const PaymentForm = ({ mentor, paidDateTime, onSuccess, onCancel }) => {
           className="btn btn-secondary"
           onClick={onCancel}
         >
-          Cancel
+          Cancel Booking
         </button>
       </div>
     </div>

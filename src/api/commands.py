@@ -1,4 +1,3 @@
-
 # import click
 # from api.models import db, User
 
@@ -32,3 +31,15 @@
 #     @app.cli.command("insert-test-data")
 #     def insert_test_data():
 #         pass
+
+from api.models import db, Mentor, Customer, PortfolioPhoto
+
+#from api.utils import APIException
+
+def setup_commands(app):
+    
+    @app.cli.command("insert-test-data")
+    def insert_test_data():
+        # Clear existing data
+        db.session.commit()
+        print("Test data inserted successfully.")

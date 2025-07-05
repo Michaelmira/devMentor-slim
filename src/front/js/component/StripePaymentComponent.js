@@ -152,7 +152,14 @@ const CheckoutForm = ({ customerId, customerName, mentorId, mentorName, amount, 
           className={`payment-button ${loading ? 'loading' : ''}`}
           type="submit"
         >
-          {loading ? 'Processing...' : 'Pay Now'}
+          {loading ? (
+            <>
+              <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+              Processing...
+            </>
+          ) : (
+            `Pay $${amount?.toFixed(2)} Now`
+          )}
         </button>
       </div>
     </form>

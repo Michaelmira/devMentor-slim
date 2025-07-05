@@ -19,6 +19,9 @@ import { MentorDetails } from "./pages/MentorDetails";
 import { BookingDetailsPage } from "./pages/BookingDetailsPage";
 import { BookingConfirmedPage } from "./pages/BookingConfirmedPage";
 import LandingPage from "./pages/LandingPage";
+import CustomerDashboard from "./pages/CustomerDashboard";
+import CustomerProfile from "./pages/CustomerProfile";
+import { VideoMeetingPage } from "./pages/VideoMeetingPage";
 
 
 //create your first component
@@ -33,9 +36,22 @@ const Layout = () => {
 
     //useEffect to handle token exp. instances
     useEffect(() => {
-        if (store.token) {
-            actions.getCurrentUser();
-        }
+        // Check and validate token on mount
+        const validateToken = async () => {
+            const token = store.token || sessionStorage.getItem("token");
+            if (token) {
+                console.log("Validating token...");
+                const isValid = await actions.getCurrentUser();
+                if (!isValid) {
+                    console.log("Token validation failed, logging out...");
+                    actions.logOut();
+                }
+            } else {
+                console.log("No token found");
+            }
+        };
+
+        validateToken();
 
         const interval = setInterval(() => {
             if (store.token) {
@@ -44,7 +60,6 @@ const Layout = () => {
                 // Handle no token case
                 console.log('User not authenticated');
             }
-            // actions.getCurrentUser()
         }, 60000);
 
         // Cleanup function
@@ -60,11 +75,16 @@ const Layout = () => {
                         <Route element={<LandingPage />} path="/" />
                         <Route element={<MentorProfile />} path="/mentor-profile" />
                         <Route element={<Single />} path="/single/:theid" />
+                        {/* <Route element={<Home />} path="/" /> */}
                         <Route element={<MentorList />} path="/mentor-list" />
-                        <Route element={<MentorDashboard />} path="/mentor-dashboard" />
                         <Route element={<MentorDetails />} path="/mentor-details/:theid" />
+                        <Route element={<CustomerProfile />} path="/customer-profile" />
+                        <Route element={<CustomerDashboard />} path="/customer-dashboard" />
+                        <Route element={<MentorProfile />} path="/mentor-profile" />
+                        <Route element={<MentorDashboard />} path="/mentor-dashboard" />
                         <Route element={<BookingDetailsPage />} path="/booking-details" />
                         <Route element={<BookingConfirmedPage />} path="/booking-confirmed/:bookingId" />
+                        <Route element={<VideoMeetingPage />} path="/video-meeting/:meetingId" />
                         <Route element={<h1>Not found!</h1>} path="*" />
                     </Routes>
                     <Footer />
