@@ -36,6 +36,7 @@ export const groupedOptions = [
         label: 'State',
         options: stateOptions,
     },
+
 ];
 
 // Skills options
@@ -106,6 +107,61 @@ export const skillsList = [
     { id: 64, label: 'Code Review' }
 ];
 
+// Specialties options
+export const specialtiesList = [
+  { id: 1, label: "Software Development" },
+  { id: 2, label: "Project Management" },
+  { id: 3, label: "Entrepreneurship" },
+  { id: 4, label: "Cybersecurity" },
+  { id: 5, label: "Information Technology (IT)" },
+  { id: 6, label: "Data Science" },
+  { id: 7, label: "Machine Learning" },
+  { id: 8, label: "Artificial Intelligence" },
+  { id: 9, label: "Cloud Computing" },
+  { id: 10, label: "Product Management" },
+  { id: 11, label: "UI/UX Design" },
+  { id: 12, label: "Web Development" },
+  { id: 13, label: "Mobile App Development" },
+  { id: 14, label: "DevOps" },
+  { id: 15, label: "Quality Assurance & Testing" },
+  { id: 16, label: "Digital Marketing" },
+  { id: 17, label: "Search Engine Optimization (SEO)" },
+  { id: 18, label: "Content Strategy" },
+  { id: 19, label: "Graphic Design" },
+  { id: 20, label: "Video Production" },
+  { id: 21, label: "Finance & Accounting" },
+  { id: 22, label: "Investment Banking" },
+  { id: 23, label: "Financial Planning" },
+  { id: 24, label: "Business Strategy" },
+  { id: 25, label: "Operations Management" },
+  { id: 26, label: "Human Resources" },
+  { id: 27, label: "Recruiting & Talent Acquisition" },
+  { id: 28, label: "Sales & Business Development" },
+  { id: 29, label: "Customer Success" },
+  { id: 30, label: "Legal & Compliance" },
+  { id: 31, label: "Supply Chain & Logistics" },
+  { id: 32, label: "Healthcare Administration" },
+  { id: 33, label: "Nursing & Clinical Care" },
+  { id: 34, label: "Public Health" },
+  { id: 35, label: "Education & Teaching" },
+  { id: 36, label: "Instructional Design" },
+  { id: 37, label: "Research & Development" },
+  { id: 38, label: "Mechanical Engineering" },
+  { id: 39, label: "Electrical Engineering" },
+  { id: 40, label: "Civil Engineering" },
+  { id: 41, label: "Environmental Science" },
+  { id: 42, label: "Architecture" },
+  { id: 43, label: "Real Estate" },
+  { id: 44, label: "Consulting" },
+  { id: 45, label: "Nonprofit Management" },
+  { id: 46, label: "Public Relations" },
+  { id: 47, label: "Journalism & Media" },
+  { id: 48, label: "Photography" },
+  { id: 49, label: "Game Design & Development" },
+  { id: 50, label: "Blockchain & Web3" },
+  { id: 51, label: "E-commerce" },
+  { id: 52, label: "Marketing Analytics" }
+]
 // State options
 export const stateOptions = [
     { value: 'AL', label: 'AL - Alabama' },

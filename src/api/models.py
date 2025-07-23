@@ -86,6 +86,7 @@ class Mentor(db.Model):
     google_oauth_credentials = db.Column(db.Text, nullable=True)
     is_verified = db.Column(db.Boolean(), default=False, nullable=False)
     verification_code = db.Column(db.String(6), nullable=True)
+    specialties = db.Column(MutableList.as_mutable(ARRAY(db.String(255))), default=[])
     
     profile_photo = db.relationship("MentorImage", back_populates="mentor", uselist=False)
     portfolio_photos = db.relationship("PortfolioPhoto", back_populates="mentor")
@@ -114,7 +115,8 @@ class Mentor(db.Model):
             "profile_photo": self.profile_photo.serialize() if self.profile_photo else None,
             "portfolio_photos": [portfolio_photo.serialize() for portfolio_photo in self.portfolio_photos] if self.portfolio_photos is not None else [],
             "about_me": self.about_me,
-            "price": str(self.price)
+            "price": str(self.price),
+            "specialties": [specialty for specialty in self.specialties]
         }
 
 class MentorImage(db.Model):

@@ -50,6 +50,7 @@ python_version = "3.10"
 
 [scripts]
 start = "flask run -p 3001 -h 0.0.0.0"
+populate_db = "python ./src/api/seed_mentors.py"
 init = "flask db init"
 migrate = "flask db migrate"
 upgrade = "flask db upgrade"
