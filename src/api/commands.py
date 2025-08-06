@@ -1,11 +1,11 @@
-
+# Add this to your src/api/commands.py file
 
 import json
 import datetime
 import os
 from decimal import Decimal
 from werkzeug.security import generate_password_hash
-from api.models import db, Mentor, MentorImage
+from api.models import db, Mentor, MentorImage, CalendarSettings, MentorAvailability, MentorUnavailability
 
 def load_json_data(filename):
     """Load JSON data from the specified filename"""
@@ -105,6 +105,64 @@ def seed_mentors_data():
                 db.session.add(mentor)
                 db.session.flush()  # Flush to get the mentor ID
                 
+                # Add calendar settings if specified in JSON
+                calendar_settings_data = entry.get('calendar_settings')
+                if calendar_settings_data:
+                    try:
+                        calendar_settings = CalendarSettings(
+                            mentor_id=mentor.id,
+                            session_duration=calendar_settings_data.get('session_duration', 60),
+                            buffer_time=calendar_settings_data.get('buffer_time', 15),
+                            advance_booking_days=calendar_settings_data.get('advance_booking_days', 30),
+                            minimum_notice_hours=calendar_settings_data.get('minimum_notice_hours', 24),
+                            timezone=calendar_settings_data.get('timezone', 'America/Los_Angeles')
+                        )
+                        db.session.add(calendar_settings)
+                        print(f"📅 Added calendar settings for {entry['first_name']} {entry['last_name']}")
+                    except Exception as calendar_error:
+                        print(f"⚠️  Failed to add calendar settings for {entry['email']}: {str(calendar_error)}")
+                
+                # Add availabilities if specified in JSON
+                availabilities_data = entry.get('availabilities', [])
+                for avail_data in availabilities_data:
+                    try:
+                        availability = MentorAvailability(
+                            mentor_id=mentor.id,
+                            day_of_week=avail_data['day_of_week'],
+                            start_time=datetime.datetime.strptime(avail_data['start_time'], '%H:%M').time(),
+                            end_time=datetime.datetime.strptime(avail_data['end_time'], '%H:%M').time(),
+                            timezone=avail_data.get('timezone', 'America/Los_Angeles'),
+                            is_active=True
+                        )
+                        db.session.add(availability)
+                    except Exception as avail_error:
+                        print(f"⚠️  Failed to add availability slot for {entry['email']}: {str(avail_error)}")
+                        continue
+                
+                if availabilities_data:
+                    print(f"⏰ Added {len(availabilities_data)} availability slots for {entry['first_name']} {entry['last_name']}")
+                
+                # Add unavailabilities if specified in JSON
+                unavailabilities_data = entry.get('unavailabilities', [])
+                for unavail_data in unavailabilities_data:
+                    try:
+                        start_datetime = datetime.datetime.fromisoformat(unavail_data['start_datetime'].replace('Z', '+00:00'))
+                        end_datetime = datetime.datetime.fromisoformat(unavail_data['end_datetime'].replace('Z', '+00:00'))
+                        
+                        unavailability = MentorUnavailability(
+                            mentor_id=mentor.id,
+                            start_datetime=start_datetime.replace(tzinfo=None),  # Store as naive UTC
+                            end_datetime=end_datetime.replace(tzinfo=None),      # Store as naive UTC
+                            reason=unavail_data.get('reason', '')
+                        )
+                        db.session.add(unavailability)
+                    except Exception as unavail_error:
+                        print(f"⚠️  Failed to add unavailability for {entry['email']}: {str(unavail_error)}")
+                        continue
+                
+                if unavailabilities_data:
+                    print(f"🚫 Added {len(unavailabilities_data)} unavailability periods for {entry['first_name']} {entry['last_name']}")
+                
                 # Add profile photo if specified in JSON
                 photo_data = entry.get('profile_photo')
                 if photo_data:
@@ -135,7 +193,7 @@ def seed_mentors_data():
         # Commit all changes
         if created_count > 0:
             db.session.commit()
-            print(f"\n🎉 Successfully seeded {created_count} mentors from JSON data!")
+            print(f"\n🎉 Successfully seeded {created_count} mentors with complete profiles and schedules!")
         else:
             print(f"\n📊 No new mentors created.")
             
