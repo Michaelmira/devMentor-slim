@@ -440,7 +440,7 @@ def mentor_edit_self():
     # Define a list of fields that are safe to update directly from the main profile form
     updatable_fields = [
         'first_name', 'last_name', 'nick_name', 'phone', 'city',
-        'what_state', 'country', 'about_me', 'years_exp', 'skills', 'price',
+        'what_state', 'country', 'about_me', 'years_exp', 'skills', 'price','specialties'
         'linkedin_url', 'github_url'
     ]
 

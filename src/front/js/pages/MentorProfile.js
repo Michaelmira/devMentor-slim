@@ -18,6 +18,7 @@ import {
   daysOfTheWeek,
   stateOptions,
   countryOptions,
+  specialtiesList
 } from "../store/data";
 
 import PhoneInput from "react-phone-input-2";
@@ -71,6 +72,7 @@ export const MentorProfile = () => {
     country: "",
     years_exp: "",
     skills: [],
+    specialties: [],
     price: null,
     about_me: "",
     calendly_url: "",
@@ -691,6 +693,28 @@ export const MentorProfile = () => {
                 </>
               ) : (
                 mentor.years_exp
+              )}
+            </dd>
+
+             <dt className="col-sm-4 form-label">Specialties:</dt>
+            
+            <dd className="col-sm-8">
+              {editMode ? (
+                <CreatableSelect
+                  isMulti
+                  name="specialties"
+                  value={mentor.specialties?.map((specialty) => ({
+                    value: specialty,
+                    label: specialty,
+                  }))}
+                  onChange={handleSelectChange}
+                  options={specialtiesList.filter(
+                    (specialty) => !mentor.specialties?.includes(specialty.label)
+                  )}
+                  closeMenuOnSelect={false}
+                />
+              ) : (
+                mentor.specialties?.join(", ")
               )}
             </dd>
 

@@ -16,6 +16,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from datetime import timedelta
 
 
+
 # from models import Person
 
 ENV = "development" if os.getenv("FLASK_DEBUG") == "1" else "production"
@@ -106,6 +107,7 @@ setup_admin(app)
 app.register_blueprint(api, url_prefix='/api')
 
 # Handle/serialize errors like a JSON object
+
 
 
 @app.errorhandler(APIException)

@@ -1,15 +1,24 @@
-# Add this to your src/api/commands.py file
-
+#!/usr/bin/env python3
+"""
+Seed script for populating the database with mentor data
+Run this script to populate your database with dummy mentors for testing
+"""
 import json
 import datetime
 import os
+import sys
 from decimal import Decimal
 from werkzeug.security import generate_password_hash
+
+# Add the parent directory to the path so we can import from api
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Now import the models and db
 from api.models import db, Mentor, MentorImage, CalendarSettings, MentorAvailability, MentorUnavailability
 
 def load_json_data(filename):
     """Load JSON data from the specified filename"""
-    base_dir = os.path.dirname(__file__)  # api directory
+    base_dir = os.path.dirname(__file__)  # Get folder seed_mentors.py is in
     filepath = os.path.join(base_dir, filename)
     
     if not os.path.exists(filepath):
@@ -18,7 +27,7 @@ def load_json_data(filename):
     with open(filepath, 'r', encoding='utf-8') as f:
         return json.load(f)
 
-def seed_mentors_data():
+def seed_mentors():
     """Seed the database with mentor data from dummy_mentors.json"""
     try:
         print("🌱 Starting mentor seeding process...")
@@ -83,7 +92,7 @@ def seed_mentors_data():
                 # Create the mentor object
                 mentor = Mentor(
                     email=entry['email'],
-                    password=hashed_password,
+                    password=hashed_password,  # Use properly hashed password
                     first_name=entry['first_name'],
                     last_name=entry['last_name'],
                     nick_name=entry.get('nick_name'),
@@ -99,7 +108,7 @@ def seed_mentors_data():
                     is_verified=entry.get('is_verified', False),
                     verification_code=verification_code,
                     specialties=entry.get('specialties', []),
-                    is_active=True
+                    is_active=True  # Set as active by default
                 )
                 
                 db.session.add(mentor)
@@ -201,27 +210,39 @@ def seed_mentors_data():
             print(f"📊 Skipped {skipped_count} existing mentors.")
             
         print("✅ Mentor seeding process completed.")
-        return True
         
+    except FileNotFoundError as e:
+        print(f"❌ File not found: {str(e)}")
+        print("📍 Make sure dummy_mentors.json is in the same directory as this script")
+        return False
     except Exception as e:
         print(f"❌ Error during seeding: {str(e)}")
         db.session.rollback()
         return False
-
-def setup_commands(app):
-    @app.cli.command("insert-test-data")
-    def insert_test_data():
-        """Insert test data including mentors"""
-        print("Inserting test data...")
-        success = seed_mentors_data()
-        if success:
-            print("Test data inserted successfully.")
-        else:
-            print("Failed to insert test data.")
     
-    @app.cli.command("seed-mentors")
-    def seed_mentors_command():
-        """Seed mentors from dummy_mentors.json"""
-        success = seed_mentors_data()
-        if not success:
-            print("Seeding failed.")
+    return True
+
+def main():
+    """Main function to run the seeding process"""
+    # Import Flask app to get the app context
+    try:
+        from app import app
+        
+        # Run within app context
+        with app.app_context():
+            success = seed_mentors()
+            if success:
+                sys.exit(0)
+            else:
+                sys.exit(1)
+                
+    except ImportError:
+        print("❌ Could not import Flask app. Make sure you're running this from the correct directory.")
+        print("📍 Try running: python src/api/seed_mentors.py")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Error setting up app context: {str(e)}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

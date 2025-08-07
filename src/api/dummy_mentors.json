@@ -1,0 +1,706 @@
+{
+  "mentors": [
+    {
+      "email": "mentor1@example.com",
+      "password": "hashedpassword1",
+      "first_name": "Alice",
+      "last_name": "Smith",
+      "nick_name": "Al",
+      "phone": "1234567890",
+      "city": "Orlando",
+      "what_state": "Florida",
+      "country": "USA",
+      "about_me": "Experienced software developer and mentor.",
+      "years_exp": "10",
+      "skills": ["Python", "Flask", "React"],
+      "price": 49.99,
+      "last_active": "2024-06-01T14:30:00",
+      "is_verified": true,
+      "verification_code": "999000",
+      "specialties": ["Web Development", "Backend"],
+      "profile_photo": {
+        "public_id": "mentor_photos/alice_smith",
+        "image_url": "https://randomuser.me/api/portraits/women/1.jpg",
+        "position_x": 0.5,
+        "position_y": 0.5,
+        "scale": 1.0
+      },
+      "calendar_settings": {
+        "session_duration": 60,
+        "buffer_time": 15,
+        "advance_booking_days": 30,
+        "minimum_notice_hours": 24,
+        "timezone": "America/New_York"
+      },
+      "availabilities": [
+        {
+          "day_of_week": 1,
+          "start_time": "09:00",
+          "end_time": "17:00",
+          "timezone": "America/New_York"
+        },
+        {
+          "day_of_week": 2,
+          "start_time": "09:00",
+          "end_time": "17:00",
+          "timezone": "America/New_York"
+        },
+        {
+          "day_of_week": 3,
+          "start_time": "09:00",
+          "end_time": "17:00",
+          "timezone": "America/New_York"
+        },
+        {
+          "day_of_week": 4,
+          "start_time": "09:00",
+          "end_time": "17:00",
+          "timezone": "America/New_York"
+        },
+        {
+          "day_of_week": 5,
+          "start_time": "09:00",
+          "end_time": "15:00",
+          "timezone": "America/New_York"
+        }
+      ],
+      "unavailabilities": [
+        {
+          "start_datetime": "2025-08-20T13:00:00+00:00",
+          "end_datetime": "2025-08-22T17:00:00+00:00",
+          "reason": "Conference"
+        }
+      ]
+    },
+    {
+      "email": "mentor2@example.com",
+      "password": "hashedpassword2",
+      "first_name": "Bob",
+      "last_name": "Johnson",
+      "nick_name": "Bobby",
+      "phone": "9876543210",
+      "city": "Austin",
+      "what_state": "Texas",
+      "country": "USA",
+      "about_me": "UI/UX designer turned mentor.",
+      "years_exp": "8",
+      "skills": ["Figma", "Sketch", "Adobe XD"],
+      "price": 35.00,
+      "last_active": "2024-06-15T09:00:00",
+      "is_verified": true,
+      "verification_code": "999000",
+      "specialties": ["Design", "UX"],
+      "profile_photo": {
+        "public_id": "mentor_photos/bob_johnson",
+        "image_url": "https://randomuser.me/api/portraits/men/1.jpg",
+        "position_x": 0.5,
+        "position_y": 0.5,
+        "scale": 1.0
+      },
+      "calendar_settings": {
+        "session_duration": 90,
+        "buffer_time": 15,
+        "advance_booking_days": 21,
+        "minimum_notice_hours": 12,
+        "timezone": "America/Chicago"
+      },
+      "availabilities": [
+        {
+          "day_of_week": 1,
+          "start_time": "14:00",
+          "end_time": "20:00",
+          "timezone": "America/Chicago"
+        },
+        {
+          "day_of_week": 2,
+          "start_time": "14:00",
+          "end_time": "20:00",
+          "timezone": "America/Chicago"
+        },
+        {
+          "day_of_week": 3,
+          "start_time": "14:00",
+          "end_time": "20:00",
+          "timezone": "America/Chicago"
+        },
+        {
+          "day_of_week": 6,
+          "start_time": "10:00",
+          "end_time": "16:00",
+          "timezone": "America/Chicago"
+        }
+      ],
+      "unavailabilities": [
+        {
+          "start_datetime": "2025-08-15T00:00:00+00:00",
+          "end_datetime": "2025-08-17T23:59:59+00:00",
+          "reason": "Family wedding"
+        }
+      ]
+    },
+    {
+      "email": "sarahw@example.com",
+      "password": "hashedpassword",
+      "first_name": "Sarah",
+      "last_name": "W.",
+      "nick_name": "Sarah",
+      "phone": "0000000000",
+      "city": "San Francisco",
+      "what_state": "California",
+      "country": "USA",
+      "about_me": "Software Engineer at Google",
+      "years_exp": "5",
+      "skills": ["JavaScript", "React", "Agile"],
+      "price": 50,
+      "last_active": "2024-07-01T10:00:00",
+      "is_verified": true,
+      "verification_code": "999000",
+      "specialties": ["Software Engineering"],
+      "profile_photo": {
+        "public_id": "mentor_photos/sarah_w",
+        "image_url": "https://randomuser.me/api/portraits/women/22.jpg",
+        "position_x": 0.5,
+        "position_y": 0.5,
+        "scale": 1.0
+      },
+      "calendar_settings": {
+        "session_duration": 60,
+        "buffer_time": 10,
+        "advance_booking_days": 14,
+        "minimum_notice_hours": 48,
+        "timezone": "America/Los_Angeles"
+      },
+      "availabilities": [
+        {
+          "day_of_week": 2,
+          "start_time": "18:00",
+          "end_time": "21:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 4,
+          "start_time": "18:00",
+          "end_time": "21:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 6,
+          "start_time": "09:00",
+          "end_time": "15:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 0,
+          "start_time": "13:00",
+          "end_time": "17:00",
+          "timezone": "America/Los_Angeles"
+        }
+      ],
+      "unavailabilities": [
+        {
+          "start_datetime": "2025-09-01T16:00:00+00:00",
+          "end_datetime": "2025-09-05T08:00:00+00:00",
+          "reason": "Team retreat"
+        }
+      ]
+    },
+    {
+      "email": "haor@example.com",
+      "password": "hashedpassword",
+      "first_name": "Hao",
+      "last_name": "R.",
+      "nick_name": "Hao",
+      "phone": "0000000000",
+      "city": "Seattle",
+      "what_state": "Washington",
+      "country": "USA",
+      "about_me": "Full-Stack Developer at Airbnb",
+      "years_exp": "5",
+      "skills": ["Node.js", "Vue", "Scrum"],
+      "price": 50,
+      "last_active": "2024-07-01T10:00:00",
+      "is_verified": true,
+      "verification_code": "999000",
+      "specialties": ["Full Stack Development"],
+      "profile_photo": {
+        "public_id": "mentor_photos/hao_r",
+        "image_url": "https://randomuser.me/api/portraits/men/12.jpg",
+        "position_x": 0.5,
+        "position_y": 0.5,
+        "scale": 1.0
+      },
+      "calendar_settings": {
+        "session_duration": 120,
+        "buffer_time": 30,
+        "advance_booking_days": 60,
+        "minimum_notice_hours": 72,
+        "timezone": "America/Los_Angeles"
+      },
+      "availabilities": [
+        {
+          "day_of_week": 0,
+          "start_time": "16:00",
+          "end_time": "22:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 1,
+          "start_time": "16:00",
+          "end_time": "22:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 2,
+          "start_time": "16:00",
+          "end_time": "22:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 3,
+          "start_time": "16:00",
+          "end_time": "22:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 4,
+          "start_time": "16:00",
+          "end_time": "22:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 5,
+          "start_time": "16:00",
+          "end_time": "22:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 6,
+          "start_time": "16:00",
+          "end_time": "22:00",
+          "timezone": "America/Los_Angeles"
+        }
+      ],
+      "unavailabilities": []
+    },
+    {
+      "email": "emmaj@example.com",
+      "password": "hashedpassword",
+      "first_name": "Emma",
+      "last_name": "J.",
+      "nick_name": "Emma",
+      "phone": "0000000000",
+      "city": "Redmond",
+      "what_state": "Washington",
+      "country": "USA",
+      "about_me": "Data Scientist at Microsoft",
+      "years_exp": "5",
+      "skills": ["Python", "Pandas", "Machine Learning"],
+      "price": 50,
+      "last_active": "2024-07-01T10:00:00",
+      "is_verified": true,
+      "verification_code": "999000",
+      "specialties": ["Data Science"],
+      "profile_photo": {
+        "public_id": "mentor_photos/emma_j",
+        "image_url": "https://randomuser.me/api/portraits/women/42.jpg",
+        "position_x": 0.5,
+        "position_y": 0.5,
+        "scale": 1.0
+      },
+      "calendar_settings": {
+        "session_duration": 75,
+        "buffer_time": 15,
+        "advance_booking_days": 45,
+        "minimum_notice_hours": 24,
+        "timezone": "America/Los_Angeles"
+      },
+      "availabilities": [
+        {
+          "day_of_week": 1,
+          "start_time": "19:00",
+          "end_time": "22:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 3,
+          "start_time": "19:00",
+          "end_time": "22:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 5,
+          "start_time": "17:00",
+          "end_time": "20:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 6,
+          "start_time": "08:00",
+          "end_time": "12:00",
+          "timezone": "America/Los_Angeles"
+        }
+      ],
+      "unavailabilities": [
+        {
+          "start_datetime": "2025-08-11T00:00:00+00:00",
+          "end_datetime": "2025-08-13T23:59:59+00:00",
+          "reason": "Microsoft conference"
+        }
+      ]
+    },
+    {
+      "email": "rajp@example.com",
+      "password": "hashedpassword",
+      "first_name": "Raj",
+      "last_name": "P.",
+      "nick_name": "Raj",
+      "phone": "0000000000",
+      "city": "New York",
+      "what_state": "New York",
+      "country": "USA",
+      "about_me": "Mobile Developer at Spotify",
+      "years_exp": "5",
+      "skills": ["Kotlin", "Swift", "Agile"],
+      "price": 50,
+      "last_active": "2024-07-01T10:00:00",
+      "is_verified": true,
+      "verification_code": "999000",
+      "specialties": ["Mobile Development"],
+      "profile_photo": {
+        "public_id": "mentor_photos/raj_p",
+        "image_url": "https://randomuser.me/api/portraits/men/32.jpg",
+        "position_x": 0.5,
+        "position_y": 0.5,
+        "scale": 1.0
+      },
+      "calendar_settings": {
+        "session_duration": 60,
+        "buffer_time": 15,
+        "advance_booking_days": 30,
+        "minimum_notice_hours": 12,
+        "timezone": "America/New_York"
+      },
+      "availabilities": [
+        {
+          "day_of_week": 1,
+          "start_time": "11:00",
+          "end_time": "13:00",
+          "timezone": "America/New_York"
+        },
+        {
+          "day_of_week": 1,
+          "start_time": "19:00",
+          "end_time": "22:00",
+          "timezone": "America/New_York"
+        },
+        {
+          "day_of_week": 3,
+          "start_time": "11:00",
+          "end_time": "13:00",
+          "timezone": "America/New_York"
+        },
+        {
+          "day_of_week": 3,
+          "start_time": "19:00",
+          "end_time": "22:00",
+          "timezone": "America/New_York"
+        },
+        {
+          "day_of_week": 5,
+          "start_time": "11:00",
+          "end_time": "13:00",
+          "timezone": "America/New_York"
+        },
+        {
+          "day_of_week": 0,
+          "start_time": "14:00",
+          "end_time": "18:00",
+          "timezone": "America/New_York"
+        }
+      ],
+      "unavailabilities": [
+        {
+          "start_datetime": "2025-08-25T15:00:00+00:00",
+          "end_datetime": "2025-08-29T09:00:00+00:00",
+          "reason": "Spotify hackathon"
+        }
+      ]
+    },
+    {
+      "email": "priyak@example.com",
+      "password": "hashedpassword",
+      "first_name": "Priya",
+      "last_name": "K.",
+      "nick_name": "Priya",
+      "phone": "0000000000",
+      "city": "Menlo Park",
+      "what_state": "California",
+      "country": "USA",
+      "about_me": "AI Researcher at Meta",
+      "years_exp": "5",
+      "skills": ["PyTorch", "Deep Learning", "ML Ops"],
+      "price": 50,
+      "last_active": "2024-07-01T10:00:00",
+      "is_verified": true,
+      "verification_code": "999000",
+      "specialties": ["Artificial Intelligence"],
+      "profile_photo": {
+        "public_id": "mentor_photos/priya_k",
+        "image_url": "https://randomuser.me/api/portraits/women/62.jpg",
+        "position_x": 0.5,
+        "position_y": 0.5,
+        "scale": 1.0
+      },
+      "calendar_settings": {
+        "session_duration": 90,
+        "buffer_time": 20,
+        "advance_booking_days": 45,
+        "minimum_notice_hours": 48,
+        "timezone": "America/Los_Angeles"
+      },
+      "availabilities": [
+        {
+          "day_of_week": 2,
+          "start_time": "17:30",
+          "end_time": "21:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 4,
+          "start_time": "17:30",
+          "end_time": "21:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 6,
+          "start_time": "10:00",
+          "end_time": "14:00",
+          "timezone": "America/Los_Angeles"
+        }
+      ],
+      "unavailabilities": [
+        {
+          "start_datetime": "2025-09-15T16:00:00+00:00",
+          "end_datetime": "2025-09-20T08:00:00+00:00",
+          "reason": "AI research conference"
+        }
+      ]
+    },
+    {
+      "email": "luism@example.com",
+      "password": "hashedpassword",
+      "first_name": "Luis",
+      "last_name": "M.",
+      "nick_name": "Luis",
+      "phone": "0000000000",
+      "city": "Los Gatos",
+      "what_state": "California",
+      "country": "USA",
+      "about_me": "DevOps Engineer at Netflix",
+      "years_exp": "5",
+      "skills": ["Docker", "Kubernetes", "CI/CD"],
+      "price": 50,
+      "last_active": "2024-07-01T10:00:00",
+      "is_verified": true,
+      "verification_code": "999000",
+      "specialties": ["DevOps"],
+      "profile_photo": {
+        "public_id": "mentor_photos/luis_m",
+        "image_url": "https://randomuser.me/api/portraits/men/72.jpg",
+        "position_x": 0.5,
+        "position_y": 0.5,
+        "scale": 1.0
+      },
+      "calendar_settings": {
+        "session_duration": 45,
+        "buffer_time": 15,
+        "advance_booking_days": 21,
+        "minimum_notice_hours": 24,
+        "timezone": "America/Los_Angeles"
+      },
+      "availabilities": [
+        {
+          "day_of_week": 1,
+          "start_time": "12:00",
+          "end_time": "14:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 2,
+          "start_time": "12:00",
+          "end_time": "14:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 3,
+          "start_time": "12:00",
+          "end_time": "14:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 4,
+          "start_time": "12:00",
+          "end_time": "14:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 5,
+          "start_time": "12:00",
+          "end_time": "14:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 6,
+          "start_time": "16:00",
+          "end_time": "20:00",
+          "timezone": "America/Los_Angeles"
+        }
+      ],
+      "unavailabilities": []
+    },
+    {
+      "email": "alician@example.com",
+      "password": "hashedpassword",
+      "first_name": "Alicia",
+      "last_name": "N.",
+      "nick_name": "Alicia",
+      "phone": "0000000000",
+      "city": "Cupertino",
+      "what_state": "California",
+      "country": "USA",
+      "about_me": "UX Designer at Apple",
+      "years_exp": "5",
+      "skills": ["Figma", "User Research", "Prototyping"],
+      "price": 50,
+      "last_active": "2024-07-01T10:00:00",
+      "is_verified": true,
+      "verification_code": "999000",
+      "specialties": ["UX Design"],
+      "profile_photo": {
+        "public_id": "mentor_photos/alicia_n",
+        "image_url": "https://randomuser.me/api/portraits/women/82.jpg",
+        "position_x": 0.5,
+        "position_y": 0.5,
+        "scale": 1.0
+      },
+      "calendar_settings": {
+        "session_duration": 60,
+        "buffer_time": 10,
+        "advance_booking_days": 30,
+        "minimum_notice_hours": 24,
+        "timezone": "America/Los_Angeles"
+      },
+      "availabilities": [
+        {
+          "day_of_week": 2,
+          "start_time": "17:00",
+          "end_time": "19:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 4,
+          "start_time": "17:00",
+          "end_time": "19:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 6,
+          "start_time": "09:00",
+          "end_time": "13:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 0,
+          "start_time": "10:00",
+          "end_time": "14:00",
+          "timezone": "America/Los_Angeles"
+        }
+      ],
+      "unavailabilities": [
+        {
+          "start_datetime": "2025-10-01T16:00:00+00:00",
+          "end_datetime": "2025-10-07T08:00:00+00:00",
+          "reason": "Apple design sprint"
+        }
+      ]
+    },
+    {
+      "email": "danielt@example.com",
+      "password": "hashedpassword",
+      "first_name": "Daniel",
+      "last_name": "T.",
+      "nick_name": "Daniel",
+      "phone": "0000000000",
+      "city": "Seattle",
+      "what_state": "Washington",
+      "country": "USA",
+      "about_me": "Cloud Architect at Amazon",
+      "years_exp": "5",
+      "skills": ["AWS", "Terraform", "Microservices"],
+      "price": 50,
+      "last_active": "2024-07-01T10:00:00",
+      "is_verified": true,
+      "verification_code": "999000",
+      "specialties": ["Cloud Architecture"],
+      "profile_photo": {
+        "public_id": "mentor_photos/daniel_t",
+        "image_url": "https://randomuser.me/api/portraits/men/52.jpg",
+        "position_x": 0.5,
+        "position_y": 0.5,
+        "scale": 1.0
+      },
+      "calendar_settings": {
+        "session_duration": 90,
+        "buffer_time": 15,
+        "advance_booking_days": 60,
+        "minimum_notice_hours": 48,
+        "timezone": "America/Los_Angeles"
+      },
+      "availabilities": [
+        {
+          "day_of_week": 1,
+          "start_time": "07:00",
+          "end_time": "09:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 1,
+          "start_time": "18:00",
+          "end_time": "21:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 3,
+          "start_time": "07:00",
+          "end_time": "09:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 3,
+          "start_time": "18:00",
+          "end_time": "21:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 5,
+          "start_time": "07:00",
+          "end_time": "09:00",
+          "timezone": "America/Los_Angeles"
+        },
+        {
+          "day_of_week": 0,
+          "start_time": "15:00",
+          "end_time": "19:00",
+          "timezone": "America/Los_Angeles"
+        }
+      ],
+      "unavailabilities": [
+        {
+          "start_datetime": "2025-11-20T08:00:00+00:00",
+          "end_datetime": "2025-11-25T17:00:00+00:00",
+          "reason": "AWS re:Invent conference"
+        }
+      ]
+    }
+  ]
+}
