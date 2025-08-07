@@ -441,6 +441,7 @@ def mentor_edit_self():
     updatable_fields = [
         'first_name', 'last_name', 'nick_name', 'phone', 'city',
         'what_state', 'country', 'about_me', 'years_exp', 'skills', 'price','specialties'
+        'linkedin_url', 'github_url'
     ]
 
     try:
@@ -583,22 +584,6 @@ def delete_mentor(cust_id):
     db.session.delete(mentor)
     db.session.commit()
     return jsonify({"msg": "mentor successfully deleted"}), 200
-
-
-def get_mentor_id_from_token(token):
-    try: 
-        payload = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms = ['HS256'])
-        print(f"Token payload: {payload}")
-        return payload.get("mentor_id") or payload['sub']
-    except jwt.ExpiredSignatureError:
-        print("Token expired")
-        return None
-    except jwt.InvalidTokenError as e:
-        print(f"Invalid Token: {e}")
-        return None
-    except KeyError: 
-        print("mentor_id key not found")
-        return None
     
 @api.route('/mentor/deactivate', methods=['PUT'])
 @jwt_required()
@@ -646,18 +631,6 @@ def reactivate_mentor():
 def all_customers():
    customers = Customer.query.all()
    return jsonify([customer.serialize() for customer in customers]), 200
-
-# @api.route('/customer/<int:cust_id>', methods=['GET'])
-# # @mentor_required()
-# def customer_by_id(cust_id):
-#     # current_user_id = get_jwt_identity()
-#     # current_user = User.query.get(current_user_id)
-
-#     customer = Customer.query.get(cust_id)
-#     if customer is None:
-#         return jsonify({"msg": "No customer found"}), 404
-    
-#     return jsonify(customer.serialize()), 200
 
 @api.route('/customer/signup', methods=['POST'])
 def customer_signup():
@@ -754,7 +727,7 @@ def handle_customer_edit_by_customer():
         return jsonify({"msg": "An internal error occurred while updating the profile."}), 500
 
 @api.route('/current-customer', methods=['GET'])
-@jwt_required()
+@customer_required
 def get_current_customer():
     
     customer = Customer.query.get(get_jwt_identity())
@@ -779,15 +752,6 @@ def delete_customer(cust_id):
     db.session.delete(customer)
     db.session.commit()
     return jsonify({"msg": "customer successfully deleted"}), 200
-
-@customer_required
-def get_current_customer():
-    
-    customer = Customer.query.get(get_jwt_identity())
-    if customer is None:
-        return jsonify({"msg": "No customer found"}), 404
-    
-    return jsonify(customer.serialize()), 200
 
 @api.route('/customer/bookings', methods=['GET'])
 @customer_required
@@ -3058,76 +3022,76 @@ def videosdk_webhook():
         }), 500
 
 
-@api.route('/booking/<int:booking_id>/calendar.ics', methods=['GET'])
-@jwt_required()
-def download_booking_calendar(booking_id):
-    """
-    Generate and download an iCalendar (.ics) file for a booking
-    """
-    try:
-        current_user_id = get_jwt_identity()
-        role = get_jwt()['role']
+# @api.route('/booking/<int:booking_id>/calendar.ics', methods=['GET'])
+# @jwt_required()
+# def download_booking_calendar(booking_id):
+#     """
+#     Generate and download an iCalendar (.ics) file for a booking
+#     """
+#     try:
+#         current_user_id = get_jwt_identity()
+#         role = get_jwt()['role']
         
-        # Get the booking
-        booking = Booking.query.get(booking_id)
-        if not booking:
-            return jsonify({"error": "Booking not found"}), 404
+#         # Get the booking
+#         booking = Booking.query.get(booking_id)
+#         if not booking:
+#             return jsonify({"error": "Booking not found"}), 404
         
-        # Check authorization - user must be either the customer or mentor for this booking
-        if role == 'customer' and booking.customer_id != current_user_id:
-            return jsonify({"error": "Unauthorized"}), 403
-        elif role == 'mentor' and booking.mentor_id != current_user_id:
-            return jsonify({"error": "Unauthorized"}), 403
+#         # Check authorization - user must be either the customer or mentor for this booking
+#         if role == 'customer' and booking.customer_id != current_user_id:
+#             return jsonify({"error": "Unauthorized"}), 403
+#         elif role == 'mentor' and booking.mentor_id != current_user_id:
+#             return jsonify({"error": "Unauthorized"}), 403
         
-        # Get mentor and customer details
-        mentor = Mentor.query.get(booking.mentor_id)
-        customer = Customer.query.get(booking.customer_id)
+#         # Get mentor and customer details
+#         mentor = Mentor.query.get(booking.mentor_id)
+#         customer = Customer.query.get(booking.customer_id)
         
-        if not mentor or not customer:
-            return jsonify({"error": "Missing mentor or customer data"}), 404
+#         if not mentor or not customer:
+#             return jsonify({"error": "Missing mentor or customer data"}), 404
         
-        # Generate event details
-        mentor_name = f"{mentor.first_name} {mentor.last_name}"
-        customer_name = f"{customer.first_name} {customer.last_name}"
+#         # Generate event details
+#         mentor_name = f"{mentor.first_name} {mentor.last_name}"
+#         customer_name = f"{customer.first_name} {customer.last_name}"
         
-        event_title = f"DevMentor Session with {mentor_name}"
-        event_description = f"""DevMentor Session
+#         event_title = f"DevMentor Session with {mentor_name}"
+#         event_description = f"""DevMentor Session
 
-Mentor: {mentor_name}
-Customer: {customer_name}
-Duration: {booking.session_duration} minutes
-Booking Reference: #{booking.id}
+# Mentor: {mentor_name}
+# Customer: {customer_name}
+# Duration: {booking.session_duration} minutes
+# Booking Reference: #{booking.id}
 
-Meeting Link: {booking.meeting_url if booking.meeting_url else 'Will be provided before the session'}
+# Meeting Link: {booking.meeting_url if booking.meeting_url else 'Will be provided before the session'}
 
-Questions? Contact {mentor.email}
+# Questions? Contact {mentor.email}
 
-DevMentor Platform"""
+# DevMentor Platform"""
         
-        # Generate iCalendar content
-        ical_content = generate_icalendar_content(
-            event_title=event_title,
-            start_time=booking.session_start_time,
-            end_time=booking.session_end_time,
-            description=event_description,
-            location=booking.meeting_url if booking.meeting_url else "Online"
-        )
+#         # Generate iCalendar content
+#         ical_content = generate_icalendar_content(
+#             event_title=event_title,
+#             start_time=booking.session_start_time,
+#             end_time=booking.session_end_time,
+#             description=event_description,
+#             location=booking.meeting_url if booking.meeting_url else "Online"
+#         )
         
-        # Create the response with proper headers for file download
-        response = Response(
-            ical_content,
-            mimetype='text/calendar',
-            headers={
-                'Content-Disposition': f'attachment; filename=devmentor-session-{booking_id}.ics',
-                'Content-Type': 'text/calendar; charset=utf-8'
-            }
-        )
+#         # Create the response with proper headers for file download
+#         response = Response(
+#             ical_content,
+#             mimetype='text/calendar',
+#             headers={
+#                 'Content-Disposition': f'attachment; filename=devmentor-session-{booking_id}.ics',
+#                 'Content-Type': 'text/calendar; charset=utf-8'
+#             }
+#         )
         
-        return response
+#         return response
         
-    except Exception as e:
-        current_app.logger.error(f"Error generating calendar file for booking {booking_id}: {str(e)}")
-        return jsonify({"error": "Failed to generate calendar file"}), 500
+#     except Exception as e:
+#         current_app.logger.error(f"Error generating calendar file for booking {booking_id}: {str(e)}")
+#         return jsonify({"error": "Failed to generate calendar file"}), 500
 
 
 @api.route('/send-booking-confirmation', methods=['POST'])
@@ -3478,7 +3442,6 @@ def get_mentor_sessions():
     except Exception as e:
         current_app.logger.error(f"Error getting mentor sessions: {str(e)}")
         return jsonify({"success": False, "message": "Failed to get sessions"}), 500
-    
 
 @api.route('/bookings/<int:booking_id>/finish', methods=['POST'])
 @jwt_required()

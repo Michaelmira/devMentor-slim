@@ -25,7 +25,7 @@ const SessionHistory = ({ userType }) => {
             } else {
                 result = await actions.getMentorSessions();
             }
-            
+
             if (result && result.success) {
                 setCurrentSessions(result.current_sessions || result.currentSessions || []);
                 setSessionHistory(result.session_history || result.sessionHistory || []);
@@ -61,7 +61,7 @@ const SessionHistory = ({ userType }) => {
         if (mentorId) {
             navigate(`/mentor-details/${mentorId}`);
         } else {
-            const mentor = store.mentors.find(m => 
+            const mentor = store.mentors.find(m =>
                 `${m.first_name} ${m.last_name}` === session.mentor_name
             );
             if (mentor) {
@@ -144,7 +144,7 @@ const SessionHistory = ({ userType }) => {
 
     const renderStars = (rating) => {
         if (!rating) return null;
-        
+
         return (
             <span>
                 {[...Array(5)].map((_, index) => (
@@ -169,7 +169,7 @@ const SessionHistory = ({ userType }) => {
                         {getStatusText(session.status)}
                     </small>
                 </div>
-                
+
                 <p className="mb-1">
                     <strong>Date & Time:</strong> {formatDateTime(session.session_start_time)}
                     <br />
@@ -181,7 +181,7 @@ const SessionHistory = ({ userType }) => {
                     <p className="mb-1">
                         <strong>Meeting Link:</strong>
                         <a href={session.meeting_url}
-                           className="ms-2 btn btn-primary btn-sm">
+                            className="ms-2 btn btn-primary btn-sm">
                             Join Video Meeting
                         </a>
                         <small className="d-block mt-1 text-muted">
@@ -189,7 +189,7 @@ const SessionHistory = ({ userType }) => {
                         </small>
                     </p>
                 )}
-                
+
                 {/* Create Meeting button if no meeting URL exists */}
                 {!isHistory && session.status === 'confirmed' && !session.meeting_url && (
                     <p className="mb-1">
@@ -235,6 +235,25 @@ const SessionHistory = ({ userType }) => {
                     </div>
                 )}
 
+                {/* Flagged Message - Shows when session is flagged */}
+                {(() => {
+                    const isFlagged = userType === 'customer' ?
+                        session.flagged_by_customer : session.flagged_by_mentor;
+
+                    if (isFlagged) {
+                        return (
+                            <div className="alert alert-warning mt-2 mb-2">
+                                <small>
+                                    <strong>Your session has been flagged for review.</strong><br />
+                                    If you're experiencing an issue with this session, please contact our support team at <strong>devmentorllc@gmail.com</strong> with details about your concern.<br />
+                                    We review all flagged sessions promptly and will follow up with you as needed.
+                                </small>
+                            </div>
+                        );
+                    }
+                    return null;
+                })()}
+
                 <div className="mt-2">
                     {/* Finish Session button for current confirmed sessions */}
                     {!isHistory && session.status === 'confirmed' && (
@@ -259,10 +278,10 @@ const SessionHistory = ({ userType }) => {
                             Rate Session
                         </button>
                     )}
-                    
+
                     {/* Book Again button for completed sessions */}
                     {isHistory && userType === 'customer' && (
-                        <button 
+                        <button
                             onClick={() => handleBookAgain(session)}
                             className="btn btn-secondary btn-sm me-2"
                         >
@@ -272,9 +291,9 @@ const SessionHistory = ({ userType }) => {
 
                     {/* Flag for Review button */}
                     {(() => {
-                        const isFlagged = userType === 'customer' ? 
+                        const isFlagged = userType === 'customer' ?
                             session.flagged_by_customer : session.flagged_by_mentor;
-                        
+
                         return (
                             <button
                                 onClick={() => handleFlagSession(session)}
@@ -329,14 +348,14 @@ const SessionHistory = ({ userType }) => {
 
             {/* Rating Modal - UPDATED to complete session upon submission */}
             {showRatingModal && sessionToRate && (
-                <div className="modal fade show" style={{display: 'block'}} tabIndex="-1" role="dialog">
+                <div className="modal fade show" style={{ display: 'block' }} tabIndex="-1" role="dialog">
                     <div className="modal-dialog" role="document">
                         <div className="modal-content">
                             <div className="modal-header">
                                 <h5 className="modal-title">Rate Your Session</h5>
-                                <button 
-                                    type="button" 
-                                    className="close" 
+                                <button
+                                    type="button"
+                                    className="close"
                                     onClick={() => {
                                         setShowRatingModal(false);
                                         setSessionToRate(null);
@@ -347,20 +366,20 @@ const SessionHistory = ({ userType }) => {
                             </div>
                             <div className="modal-body">
                                 <p>How was your session with {sessionToRate.mentor_name || sessionToRate.customer_name}?</p>
-                                
+
                                 <div className="form-group">
                                     <label>Rating:</label>
                                     <div>
-                                        {[1,2,3,4,5].map(star => (
-                                            <span 
+                                        {[1, 2, 3, 4, 5].map(star => (
+                                            <span
                                                 key={star}
                                                 style={{
-                                                    fontSize: '24px', 
-                                                    cursor: 'pointer', 
+                                                    fontSize: '24px',
+                                                    cursor: 'pointer',
                                                     color: star <= (sessionToRate.tempRating || 0) ? '#ffc107' : '#e9ecef'
                                                 }}
                                                 onClick={() => {
-                                                    setSessionToRate({...sessionToRate, tempRating: star});
+                                                    setSessionToRate({ ...sessionToRate, tempRating: star });
                                                 }}
                                             >
                                                 ★
@@ -368,24 +387,24 @@ const SessionHistory = ({ userType }) => {
                                         ))}
                                     </div>
                                 </div>
-                                
+
                                 <div className="form-group mt-3">
                                     <label>Additional Notes (Optional):</label>
-                                    <textarea 
-                                        className="form-control" 
+                                    <textarea
+                                        className="form-control"
                                         rows="3"
                                         value={sessionToRate.tempNotes || ''}
                                         onChange={(e) => {
-                                            setSessionToRate({...sessionToRate, tempNotes: e.target.value});
+                                            setSessionToRate({ ...sessionToRate, tempNotes: e.target.value });
                                         }}
                                         placeholder="Share your experience..."
                                     />
                                 </div>
                             </div>
                             <div className="modal-footer">
-                                <button 
-                                    type="button" 
-                                    className="btn btn-secondary" 
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
                                     onClick={() => {
                                         setShowRatingModal(false);
                                         setSessionToRate(null);
@@ -393,15 +412,15 @@ const SessionHistory = ({ userType }) => {
                                 >
                                     Cancel
                                 </button>
-                                <button 
-                                    type="button" 
+                                <button
+                                    type="button"
                                     className="btn btn-primary"
                                     disabled={!sessionToRate.tempRating}
                                     onClick={() => {
                                         if (sessionToRate.tempRating) {
                                             handleSubmitRating(
-                                                sessionToRate.id, 
-                                                sessionToRate.tempRating, 
+                                                sessionToRate.id,
+                                                sessionToRate.tempRating,
                                                 sessionToRate.tempNotes || ''
                                             );
                                         }

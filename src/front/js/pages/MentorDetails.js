@@ -507,6 +507,37 @@ export const MentorDetails = () => {
                                             </a>
                                         </li>
                                     )}
+                                    {(mentor.linkedin_url || mentor.github_url) && (
+                                        <li className="mb-2">
+                                            <div className="d-flex align-items-center">
+                                                <span className="me-2 text-muted" style={{ fontSize: '14px' }}>Social:</span>
+                                                <div className="d-flex gap-2">
+                                                    {mentor.linkedin_url && (
+                                                        <a
+                                                            href={mentor.linkedin_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="badge bg-primary text-decoration-none"
+                                                            style={{ fontSize: '0.75rem' }}
+                                                        >
+                                                            <i className="fab fa-linkedin"></i>
+                                                        </a>
+                                                    )}
+                                                    {mentor.github_url && (
+                                                        <a
+                                                            href={mentor.github_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="badge bg-dark text-decoration-none"
+                                                            style={{ fontSize: '0.75rem' }}
+                                                        >
+                                                            <i className="fab fa-github"></i>
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </li>
+                                    )}
                                 </ul>
 
 

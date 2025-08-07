@@ -77,6 +77,8 @@ export const MentorProfile = () => {
     about_me: "",
     calendly_url: "",
     is_calendly_connected: false,
+    linkedin_url: "",
+    github_url: "",
   });
   const [mentorData, setMentorData] = useState(null);
   const [calendlyStatus, setCalendlyStatus] = useState({
@@ -737,7 +739,7 @@ export const MentorProfile = () => {
               )}
             </dd>
 
-            <dt className="col-sm-4 form-label">Price:</dt>
+            <dt className="col-sm-4 form-label">Price Per Booking:</dt>
             <dd className="col-sm-8">
               {editMode ? (
                 <>
@@ -750,14 +752,14 @@ export const MentorProfile = () => {
                       onChange={handlePriceChange}
                       className="form-control"
                     />
-                    <span className="input-group-text">/hr</span>
+                    <span className="input-group-text">/Booking</span>
                   </div>
                   {invalidItems.includes("price") && (
                     <InvalidItem error="Invalid price value (ex. 20.00)" />
                   )}
                 </>
               ) : mentor.price && mentor.price !== "None" ? (
-                `$${mentor.price} /hr`
+                `$${mentor.price} /Booking`
               ) : (
                 ""
               )}
@@ -791,6 +793,48 @@ export const MentorProfile = () => {
                 <div className="about-me-container">
                   <div className="about-me-content p-1">{mentor.about_me}</div>
                 </div>
+              )}
+            </dd>
+
+            <dt className="col-sm-4 form-label">LinkedIn URL:</dt>
+            <dd className="col-sm-8">
+              {editMode ? (
+                <input
+                  type="url"
+                  name="linkedin_url"
+                  value={mentor.linkedin_url || ""}
+                  onChange={handleChange}
+                  className="form-control"
+                  placeholder="https://linkedin.com/in/your-profile"
+                />
+              ) : mentor.linkedin_url ? (
+                <a href={mentor.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-decoration-none">
+                  <i className="fab fa-linkedin me-2"></i>
+                  {mentor.linkedin_url}
+                </a>
+              ) : (
+                <span className="text-muted">Not provided</span>
+              )}
+            </dd>
+
+            <dt className="col-sm-4 form-label">GitHub URL:</dt>
+            <dd className="col-sm-8">
+              {editMode ? (
+                <input
+                  type="url"
+                  name="github_url"
+                  value={mentor.github_url || ""}
+                  onChange={handleChange}
+                  className="form-control"
+                  placeholder="https://github.com/your-username"
+                />
+              ) : mentor.github_url ? (
+                <a href={mentor.github_url} target="_blank" rel="noopener noreferrer" className="text-decoration-none">
+                  <i className="fab fa-github me-2"></i>
+                  {mentor.github_url}
+                </a>
+              ) : (
+                <span className="text-muted">Not provided</span>
               )}
             </dd>
           </dl>
