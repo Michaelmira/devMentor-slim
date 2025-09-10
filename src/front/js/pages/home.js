@@ -65,36 +65,7 @@ export const Home = () => {
 				</div>
 			</header>
 
-			<section className="why-devmentor">
-				<div className="container">
-					<h2>Why devMentor?</h2>
-					<div className="row">
-						<div className="col-md-4">
-							<div className="feature-card">
-								<img src="https://res.cloudinary.com/dufs8hbca/image/upload/w_1000,ar_16:9,c_fill,g_auto,e_sharpen/v1725933626/Saved/mentorSession1_gigjmn.jpg" alt="Learn by doing" className="feature-image" />
-								<h3>Learn by doing</h3>
-								<p>Work on real projects and learn by building things you care about.</p>
-							</div>
-						</div>
-						<div className="col-md-4">
-							<div className="feature-card">
-								<img src="https://res.cloudinary.com/dufs8hbca/image/upload/w_1000,ar_16:9,c_fill,g_auto,e_sharpen/v1725933624/Saved/GroupMentorSessionElder1_ydoslt.jpg" alt="Real-world projects" className="feature-image" />
-								<h3>Real-world projects</h3>
-								<p>Get help with your personal coding projects from experienced developers.</p>
-							</div>
-						</div>
-						<div className="col-md-4">
-							<div className="feature-card">
-								<img src="https://res.cloudinary.com/dufs8hbca/image/upload/w_1000,ar_16:9,c_fill,g_auto,e_sharpen/v1725935854/Saved/1on1MentorSession_vwg4jh.jpg" alt="Personalized learning" className="feature-image" />
-								<h3>Personalized learning</h3>
-								<p>Learn at your own pace with personalized guidance and feedback.</p>
-							</div>
-						</div>
-					</div>
-				</div>
-			</section>
-
-			<section className="featured-mentors">
+				<section className="featured-mentors">
 				<div className="container">
 					<h2>Featured mentors</h2>
 					<div className="mentor-stats">
@@ -155,6 +126,37 @@ export const Home = () => {
 					</div>
 				</div>
 			</section>
+
+			<section className="why-devmentor">
+				<div className="container">
+					<h2>Why devMentor?</h2>
+					<div className="row">
+						<div className="col-md-4">
+							<div className="feature-card">
+								<img src="https://res.cloudinary.com/dufs8hbca/image/upload/w_1000,ar_16:9,c_fill,g_auto,e_sharpen/v1725933626/Saved/mentorSession1_gigjmn.jpg" alt="Learn by doing" className="feature-image" />
+								<h3>Learn by doing</h3>
+								<p>Work on real projects and learn by building things you care about.</p>
+							</div>
+						</div>
+						<div className="col-md-4">
+							<div className="feature-card">
+								<img src="https://res.cloudinary.com/dufs8hbca/image/upload/w_1000,ar_16:9,c_fill,g_auto,e_sharpen/v1725933624/Saved/GroupMentorSessionElder1_ydoslt.jpg" alt="Real-world projects" className="feature-image" />
+								<h3>Real-world projects</h3>
+								<p>Get help with your personal coding projects from experienced developers.</p>
+							</div>
+						</div>
+						<div className="col-md-4">
+							<div className="feature-card">
+								<img src="https://res.cloudinary.com/dufs8hbca/image/upload/w_1000,ar_16:9,c_fill,g_auto,e_sharpen/v1725935854/Saved/1on1MentorSession_vwg4jh.jpg" alt="Personalized learning" className="feature-image" />
+								<h3>Personalized learning</h3>
+								<p>Learn at your own pace with personalized guidance and feedback.</p>
+							</div>
+						</div>
+					</div>
+				</div>
+			</section>
+
+		
 			<ResetPsModal />
 		</div>
 	);

@@ -118,10 +118,118 @@ def format_dual_timezone_display(utc_start_time, utc_end_time):
         'dual_timezone_display': f"{pst_start_time} - {pst_end_time} {pst_abbr} ({est_start_time} - {est_end_time} {est_abbr})"
     }
 
+def format_dynamic_timezone_display(utc_start_time, utc_end_time, customer_timezone=None):
+    """
+    Format time display showing customer's timezone first, then Eastern time
+    Always shows customer's local time first, then EST/EDT as secondary reference
+    """
+    # Convert to EST (always show this as secondary reference)
+    est_start = convert_utc_to_timezone(utc_start_time, 'America/New_York')
+    est_end = convert_utc_to_timezone(utc_end_time, 'America/New_York')
+    
+    # Format date (use EST timezone for consistency)
+    formatted_date = est_start.strftime('%A, %B %d, %Y')
+    
+    # Format EST times
+    est_start_time = est_start.strftime('%I:%M %p')
+    est_end_time = est_end.strftime('%I:%M %p')
+    est_abbr = est_start.strftime('%Z')  # Will be EST or EDT automatically
+    
+    # EST time range (always shown as secondary)
+    est_time_range = f"{est_start_time} - {est_end_time} {est_abbr}"
+    
+    # Determine primary timezone display (customer's timezone)
+    primary_timezone_display = None
+    customer_time_range = None
+    
+    if customer_timezone:
+        # Define common US timezones that get "nice" formatting
+        us_timezone_mapping = {
+            'America/Los_Angeles': 'Pacific Time',
+            'America/Denver': 'Mountain Time', 
+            'America/Chicago': 'Central Time',
+            'America/New_York': 'Eastern Time',
+            'America/Phoenix': 'Mountain Time (Arizona)',  # Arizona doesn't observe DST
+            'US/Pacific': 'Pacific Time',
+            'US/Mountain': 'Mountain Time',
+            'US/Central': 'Central Time',
+            'US/Eastern': 'Eastern Time'
+        }
+        
+        # Convert to customer's timezone
+        customer_start = convert_utc_to_timezone(utc_start_time, customer_timezone)
+        customer_end = convert_utc_to_timezone(utc_end_time, customer_timezone)
+        
+        customer_start_time = customer_start.strftime('%I:%M %p')
+        customer_end_time = customer_end.strftime('%I:%M %p')
+        customer_abbr = customer_start.strftime('%Z')
+        
+        customer_time_range = f"{customer_start_time} - {customer_end_time} {customer_abbr}"
+        
+        # Format based on whether it's a US timezone or international
+        if customer_timezone in us_timezone_mapping:
+            # Nice formatting for US timezones
+            timezone_name = us_timezone_mapping[customer_timezone]
+            primary_timezone_display = f"**{timezone_name}:** {customer_time_range}"
+        else:
+            # Simple formatting for international timezones
+            # Extract city/country from timezone (e.g., "Europe/Madrid" -> "Madrid")
+            try:
+                if '/' in customer_timezone:
+                    city = customer_timezone.split('/')[-1].replace('_', ' ')
+                else:
+                    city = customer_timezone
+                
+                primary_timezone_display = f"**{city} Time:** {customer_time_range}"
+            except:
+                # Fallback to simple display
+                primary_timezone_display = f"**Your Local Time:** {customer_time_range}"
+        
+        # Check if customer is already in Eastern time
+        if customer_timezone in ['America/New_York', 'US/Eastern']:
+            # If customer is in Eastern time, only show Eastern time (no duplication)
+            primary_timezone_display = f"**Eastern Time:** {est_time_range}"
+            customer_time_range = None  # Don't show Eastern twice
+    else:
+        # No customer timezone provided, default to Eastern time only
+        primary_timezone_display = f"**Eastern Time:** {est_time_range}"
+    
+    return {
+        'formatted_date': formatted_date,
+        'customer_time_range': customer_time_range,  # Customer's local time
+        'est_time_range': est_time_range,           # Eastern time
+        'primary_display': primary_timezone_display, # Customer's time (primary)
+        'secondary_display': f"**Eastern Time:** {est_time_range}" if customer_time_range else None,  # Eastern (secondary)
+        'dual_timezone_display': f"{customer_time_range} ({est_time_range})" if customer_time_range else est_time_range
+    }
 
+
+def format_email_timezone_html(timezone_info):
+    """
+    Format the timezone information for HTML email display
+    Shows customer's timezone first, then Eastern time as reference
+    """
+    if timezone_info['customer_time_range'] and timezone_info['customer_time_range'] != timezone_info['est_time_range']:
+        # Show customer's time first, then Eastern time as reference
+        return f"""
+        <div class="detail-value">
+            {timezone_info['primary_display']}<br>
+            {timezone_info['secondary_display']}
+        </div>
+        """
+    else:
+        # Show only Eastern time (customer is in Eastern time or no customer timezone)
+        return f"""
+        <div class="detail-value">
+            {timezone_info['primary_display']}
+        </div>
+        """
+
+
+# Update the email functions to use the new format
 def send_booking_confirmation_email(customer_email, customer_name, mentor_name, booking_details):
     """
-    Send optimized booking confirmation email with Google Calendar integration
+    Send optimized booking confirmation email with customer timezone first
     """
     # Extract booking details
     booking_id = booking_details.get('id')
@@ -131,14 +239,20 @@ def send_booking_confirmation_email(customer_email, customer_name, mentor_name, 
     meeting_url = booking_details.get('meeting_url', '')
     mentor_email = booking_details.get('mentor_email', '')
     session_duration = booking_details.get('session_duration', 60)
+    customer_timezone = booking_details.get('customer_timezone')  # Get customer's timezone
     
-    # Get dual timezone display
-    timezone_info = format_dual_timezone_display(session_start_time, session_end_time)
+    # Get dynamic timezone display (customer first, then Eastern)
+    timezone_info = format_dynamic_timezone_display(
+        session_start_time, 
+        session_end_time, 
+        customer_timezone
+    )
     
-    print(f"DEBUG: Original UTC times - Start: {session_start_time}, End: {session_end_time}")
-    print(f"DEBUG: Dual timezone display - {timezone_info['dual_timezone_display']}")
+    print(f"DEBUG: Customer timezone: {customer_timezone}")
+    print(f"DEBUG: Primary display: {timezone_info['primary_display']}")
+    print(f"DEBUG: Secondary display: {timezone_info['secondary_display']}")
     
-    # Generate calendar URLs using the new utility (keep UTC for calendar)
+    # Generate calendar URLs using UTC times
     event_title = f"DevMentor Session with {mentor_name}"
     event_description = f"""
 Your mentoring session with {mentor_name} is confirmed!
@@ -171,7 +285,7 @@ DevMentor Platform
     # Email subject
     subject = f"🎉 Booking Confirmed - Session with {mentor_name}"
     
-    # Create optimized HTML email template
+    # Create optimized HTML email template with customer timezone first
     html_content = f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -211,135 +325,56 @@ DevMentor Platform
                 height: 60px;
                 border-radius: 50%;
                 background: rgba(255, 255, 255, 0.2);
-                margin: 0 auto 20px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                margin: 0 auto 20px;
                 font-size: 30px;
+                font-weight: bold;
             }}
             .content {{
                 padding: 40px 30px;
             }}
-            .greeting {{
-                font-size: 18px;
-                color: #333;
-                margin-bottom: 20px;
-            }}
             .session-card {{
                 background: #f8f9fa;
-                border-left: 4px solid #28a745;
+                border-radius: 8px;
                 padding: 25px;
                 margin: 25px 0;
-                border-radius: 8px;
+                border-left: 4px solid #28a745;
             }}
             .session-title {{
-                font-size: 20px;
+                font-size: 18px;
                 font-weight: 600;
-                color: #333;
-                margin-bottom: 15px;
+                color: #495057;
+                margin-bottom: 20px;
+                text-align: center;
             }}
             .detail-row {{
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                padding: 8px 0;
+                margin-bottom: 15px;
+                padding-bottom: 10px;
                 border-bottom: 1px solid #e9ecef;
             }}
             .detail-row:last-child {{
                 border-bottom: none;
+                margin-bottom: 0;
             }}
             .detail-label {{
                 font-weight: 600;
-                color: #666;
+                color: #495057;
+                min-width: 120px;
             }}
             .detail-value {{
-                color: #333;
+                color: #28a745;
                 font-weight: 500;
+                text-align: right;
             }}
             .timezone-row {{
-                background: #e8f5e8;
-                padding: 15px;
-                border-radius: 6px;
-                margin: 15px 0;
-            }}
-            .timezone-row .detail-value {{
-                font-size: 14px;
-                line-height: 1.5;
-            }}
-            .calendar-buttons {{
-                text-align: center;
-                margin: 25px 0;
-            }}
-            .calendar-button {{
-                display: inline-block;
-                padding: 12px 24px;
-                margin: 5px;
-                text-decoration: none;
-                border-radius: 8px;
-                font-weight: 600;
-                font-size: 14px;
-                transition: all 0.3s ease;
-                color: white;
-            }}
-            .google-calendar {{
-                background: linear-gradient(135deg, #4285f4 0%, #34a853 100%);
-                box-shadow: 0 4px 15px rgba(66, 133, 244, 0.3);
-            }}
-            .outlook-calendar {{
-                background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%);
-                box-shadow: 0 4px 15px rgba(0, 120, 212, 0.3);
-            }}
-            .calendar-button:hover {{
-                transform: translateY(-2px);
-                text-decoration: none;
-                color: white;
-            }}
-            .google-calendar:hover {{
-                box-shadow: 0 6px 20px rgba(66, 133, 244, 0.4);
-            }}
-            .outlook-calendar:hover {{
-                box-shadow: 0 6px 20px rgba(0, 120, 212, 0.4);
-            }}
-            .meeting-section {{
-                background: #e8f5e8;
-                padding: 20px;
-                border-radius: 8px;
-                margin: 20px 0;
-                text-align: center;
-            }}
-            .meeting-url {{
-                background: white;
-                padding: 12px;
-                border-radius: 6px;
-                font-family: monospace;
-                word-break: break-all;
-                margin: 10px 0;
-                color: #0066cc;
-                text-decoration: none;
-                display: block;
-            }}
-            .next-steps {{
-                background: #fff3cd;
-                border: 1px solid #ffeaa7;
-                border-radius: 8px;
-                padding: 20px;
-                margin: 25px 0;
-            }}
-            .next-steps h3 {{
-                color: #856404;
-                margin-top: 0;
-            }}
-            .next-steps ul {{
-                color: #856404;
-                margin: 0;
-                padding-left: 20px;
-            }}
-            .footer {{
-                background: #f8f9fa;
-                padding: 30px;
-                text-align: center;
-                color: #666;
-                border-top: 1px solid #e9ecef;
+                margin-bottom: 15px;
+                padding-bottom: 15px;
+                border-bottom: 1px solid #e9ecef;
             }}
             .booking-ref {{
                 background: #e3f2fd;
@@ -350,27 +385,6 @@ DevMentor Platform
                 font-family: monospace;
                 font-weight: bold;
                 color: #1976d2;
-            }}
-            @media (max-width: 600px) {{
-                .container {{
-                    margin: 0;
-                    border-radius: 0;
-                }}
-                .content, .header, .footer {{
-                    padding: 20px;
-                }}
-                .detail-row {{
-                    flex-direction: column;
-                    align-items: flex-start;
-                }}
-                .detail-value {{
-                    margin-top: 5px;
-                }}
-                .calendar-button {{
-                    display: block;
-                    margin: 10px auto;
-                    width: 80%;
-                }}
             }}
         </style>
     </head>
@@ -397,10 +411,7 @@ DevMentor Platform
                     </div>
                     <div class="timezone-row">
                         <div class="detail-label" style="margin-bottom: 10px;">Start Time:</div>
-                        <div class="detail-value">
-                            <strong>Pacific Time:</strong> {timezone_info['pst_time_range']}<br>
-                            <strong>Eastern Time:</strong> {timezone_info['est_time_range']}
-                        </div>
+                        {format_email_timezone_html(timezone_info)}
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Duration:</span>
@@ -434,28 +445,21 @@ DevMentor Platform
                 <div class="meeting-section">
                     <h3 style="margin-top: 0; color: #28a745;">🎥 Meeting Link</h3>
                     <p>Join your session using the link below:</p>
-                    <a href="{meeting_url}" class="meeting-url" target="_blank">{meeting_url}</a>
+                    <a href="{meeting_url}" class="btn btn-success" target="_blank" style="display: inline-block; background: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 10px 0;">Join Meeting</a>
                 </div>
-                ''' if meeting_url else '''
-                <div class="meeting-section">
-                    <h3 style="margin-top: 0; color: #28a745;">🎥 Meeting Link</h3>
-                    <p>Your mentor will provide the meeting link before the session starts.</p>
-                </div>
-                '''}
+                ''' if meeting_url else ''}
                 
                 <div class="next-steps">
-                    <h3>📋 What's Next?</h3>
+                    <h3 style="margin-top: 0; color: #856404;">📋 Next Steps</h3>
                     <ul>
-                        <li>Add this session to your calendar using the buttons above</li>
-                        <li>Prepare any specific questions or topics you'd like to discuss</li>
-                        <li>Test your camera and microphone before the session</li>
-                        <li>Join the meeting 5 minutes early to ensure everything works</li>
-                        {f'<li>Contact your mentor at {mentor_email} if you have any questions</li>' if mentor_email else ''}
+                        <li>Add this session to your calendar using the links above</li>
+                        <li>Join the meeting 5 minutes early</li>
+                        <li>Prepare any questions or topics you'd like to discuss</li>
                     </ul>
                 </div>
                 
-                <p style="margin-top: 30px; color: #666;">
-                    Looking forward to your productive session! If you need to reschedule or have any questions, 
+                <p style="margin-top: 30px;">
+                    Looking forward to your session! If you need to reschedule or have any questions, 
                     please contact us as soon as possible.
                 </p>
                 
@@ -478,7 +482,6 @@ DevMentor Platform
     
     return send_email(customer_email, subject, html_content)
 
-
 def send_mentor_booking_notification_email(mentor_email, mentor_name, customer_name, booking_details):
     """
     Send booking notification email to mentor when a new booking is made
@@ -495,7 +498,8 @@ def send_mentor_booking_notification_email(mentor_email, mentor_name, customer_n
     mentor_payout = booking_details.get('mentor_payout', amount_paid * 0.9)
     
     # Get dual timezone display
-    timezone_info = format_dual_timezone_display(session_start_time, session_end_time)
+    customer_timezone = booking_details.get('customer_timezone')
+    timezone_info = format_dynamic_timezone_display(session_start_time, session_end_time, customer_timezone)
     
     # Generate calendar URLs for mentor (using UTC times for calendar)
     event_title = f"DevMentor Session with {customer_name}"
@@ -776,8 +780,7 @@ DevMentor Platform
                     <div class="timezone-row">
                         <div class="detail-label" style="margin-bottom: 10px;">Time:</div>
                         <div class="detail-value">
-                            <strong>Pacific Time:</strong> {timezone_info['pst_time_range']}<br>
-                            <strong>Eastern Time:</strong> {timezone_info['est_time_range']}
+                            {format_email_timezone_html(timezone_info)}
                         </div>
                     </div>
                     <div class="detail-row">

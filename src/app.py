@@ -16,6 +16,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from datetime import timedelta
 
 
+
 # from models import Person
 
 ENV = "development" if os.getenv("FLASK_DEBUG") == "1" else "production"
@@ -26,6 +27,8 @@ app.url_map.strict_slashes = False
 
 # Apply ProxyFix for deployments behind a reverse proxy
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
 
 # Secret key for session management (CRITICAL FOR OAUTH STATE)
 app.secret_key = os.getenv("FLASK_SESSION_SECRET_KEY")
@@ -38,6 +41,8 @@ app.config["SESSION_COOKIE_SAMESITE"] = "None"
 app.config["SESSION_COOKIE_SECURE"] = True # Requires HTTPS
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_PATH"] = "/"
+
+
 
 # Set SESSION_COOKIE_DOMAIN for *.app.github.dev or similar codespace domains
 hostname = os.getenv("BACKEND_URL", "").lower()
@@ -106,6 +111,7 @@ setup_admin(app)
 app.register_blueprint(api, url_prefix='/api')
 
 # Handle/serialize errors like a JSON object
+
 
 
 @app.errorhandler(APIException)

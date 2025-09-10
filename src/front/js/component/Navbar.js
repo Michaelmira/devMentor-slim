@@ -33,7 +33,7 @@ export const Navbar = () => {
 			<nav className="navbar navbar-light bg-light bg-opacity-50 pt-3 p-0">
 				<div className="container">
 					<Link to="/" className="navbar-link">
-						<span className="dancing-script-text">devMentor</span>
+						<span className="dancing-script-text"><img src="https://res.cloudinary.com/dufs8hbca/image/upload/v1753311566/Saved/GatherDoneNoBG.png" style={{width:"150px"}}/></span>
 					</Link>
 					{/* <Link to="/">
 					<span className="navbar-brand mb-0 h1 btn btn-outline-secondary fw-bolder border-3">devMentor</span>
@@ -101,10 +101,6 @@ export const Navbar = () => {
 											<Link to="./mentor-profile" className="dropdown-item bold-text text-end">
 												<span className="navbarFont">Mentor Profile</span>
 												<i className="fa-solid fa-user" />
-											</Link>
-											<Link to="/mentor-session-board" className="dropdown-item bold-text text-end">
-												<span className="navbarFont">Mentor Session Board</span>
-												<i className="fa-solid fa-id-card-clip" />
 											</Link>
 											<button className="dropdown-item bold-text text-end" onClick={handleLogout}>
 												<span className="navbarFont">Log Out</span>

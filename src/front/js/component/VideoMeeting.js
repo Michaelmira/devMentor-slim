@@ -1131,6 +1131,7 @@ const VideoMeeting = ({ meetingId, token, userName, isModerator }) => {
         setMeetingConfig({
             meetingId,
             micEnabled: true,
+            
             webcamEnabled: true,
             name: userName || "Participant",
             mode: Constants.modes.CONFERENCE,

@@ -338,14 +338,68 @@ def all_mentors():
    mentors = Mentor.query.all()
    return jsonify([mentor.serialize() for mentor in mentors]), 200
 
+
 @api.route('/mentorsnosession', methods=['GET'])
 def all_mentors_no_sessions():
-    mentors = Mentor.query.all()
-    serialized_mentors = [mentor.serialize() for mentor in mentors]
-    # Remove confirmed_sessions from each mentor's data
-    for mentor in serialized_mentors:
-        mentor.pop('confirmed_sessions', None)
-    return jsonify(serialized_mentors), 200
+    try:
+        mentors = Mentor.query.all()
+        serialized_mentors = []
+        
+        for mentor in mentors:
+            mentor_data = mentor.serialize()
+            # Remove confirmed_sessions from each mentor's data
+            mentor_data.pop('confirmed_sessions', None)
+            
+            # Calculate rating data for this mentor
+            try:
+                rated_bookings = Booking.query.filter(
+                    Booking.mentor_id == mentor.id,
+                    Booking.customer_rating.isnot(None),
+                    Booking.status == BookingStatus.COMPLETED
+                ).all()
+                
+                total_reviews = len(rated_bookings)
+                
+                # Only include rating data if mentor has 5+ reviews
+                if total_reviews >= 5:
+                    total_rating = sum(booking.customer_rating for booking in rated_bookings)
+                    average_rating = round(total_rating / total_reviews, 1)
+                    
+                    # Calculate rating distribution
+                    rating_distribution = {str(i): 0 for i in range(1, 6)}
+                    for booking in rated_bookings:
+                        rating_distribution[str(booking.customer_rating)] += 1
+                    
+                    mentor_data['rating_data'] = {
+                        "has_rating": True,
+                        "average_rating": average_rating,
+                        "total_reviews": total_reviews,
+                        "rating_distribution": rating_distribution
+                    }
+                else:
+                    mentor_data['rating_data'] = {
+                        "has_rating": False,
+                        "total_reviews": total_reviews,
+                        "minimum_required": 5
+                    }
+            except Exception as rating_error:
+                # If there's any error calculating ratings, set as unranked
+                current_app.logger.error(f"Error calculating ratings for mentor {mentor.id}: {str(rating_error)}")
+                mentor_data['rating_data'] = {
+                    "has_rating": False,
+                    "total_reviews": 0,
+                    "minimum_required": 5
+                }
+            
+            serialized_mentors.append(mentor_data)
+        
+        return jsonify(serialized_mentors), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in all_mentors_no_sessions: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({"error": "Failed to load mentors"}), 500
 
 @api.route('/mentor/<int:mentor_id>', methods=['GET'])
 def get_mentor_by_id(mentor_id):
@@ -386,8 +440,8 @@ def mentor_edit_self():
     # Define a list of fields that are safe to update directly from the main profile form
     updatable_fields = [
         'first_name', 'last_name', 'nick_name', 'phone', 'city',
-        'what_state', 'country', 'about_me', 'years_exp', 'skills',
-        'days', 'price'
+        'what_state', 'country', 'about_me', 'years_exp', 'skills', 'price','specialties'
+        'linkedin_url', 'github_url'
     ]
 
     try:
@@ -530,22 +584,6 @@ def delete_mentor(cust_id):
     db.session.delete(mentor)
     db.session.commit()
     return jsonify({"msg": "mentor successfully deleted"}), 200
-
-
-def get_mentor_id_from_token(token):
-    try: 
-        payload = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms = ['HS256'])
-        print(f"Token payload: {payload}")
-        return payload.get("mentor_id") or payload['sub']
-    except jwt.ExpiredSignatureError:
-        print("Token expired")
-        return None
-    except jwt.InvalidTokenError as e:
-        print(f"Invalid Token: {e}")
-        return None
-    except KeyError: 
-        print("mentor_id key not found")
-        return None
     
 @api.route('/mentor/deactivate', methods=['PUT'])
 @jwt_required()
@@ -593,18 +631,6 @@ def reactivate_mentor():
 def all_customers():
    customers = Customer.query.all()
    return jsonify([customer.serialize() for customer in customers]), 200
-
-# @api.route('/customer/<int:cust_id>', methods=['GET'])
-# # @mentor_required()
-# def customer_by_id(cust_id):
-#     # current_user_id = get_jwt_identity()
-#     # current_user = User.query.get(current_user_id)
-
-#     customer = Customer.query.get(cust_id)
-#     if customer is None:
-#         return jsonify({"msg": "No customer found"}), 404
-    
-#     return jsonify(customer.serialize()), 200
 
 @api.route('/customer/signup', methods=['POST'])
 def customer_signup():
@@ -701,7 +727,7 @@ def handle_customer_edit_by_customer():
         return jsonify({"msg": "An internal error occurred while updating the profile."}), 500
 
 @api.route('/current-customer', methods=['GET'])
-@jwt_required()
+@customer_required
 def get_current_customer():
     
     customer = Customer.query.get(get_jwt_identity())
@@ -726,15 +752,6 @@ def delete_customer(cust_id):
     db.session.delete(customer)
     db.session.commit()
     return jsonify({"msg": "customer successfully deleted"}), 200
-
-@customer_required
-def get_current_customer():
-    
-    customer = Customer.query.get(get_jwt_identity())
-    if customer is None:
-        return jsonify({"msg": "No customer found"}), 404
-    
-    return jsonify(customer.serialize()), 200
 
 @api.route('/customer/bookings', methods=['GET'])
 @customer_required
@@ -1813,6 +1830,7 @@ def mvp_github_oauth_initiate():
 
 @api.route('/auth/mvp/github/callback', methods=['GET'])
 def mvp_github_oauth_callback():
+
     """Handle GitHub OAuth callback for MVP booking"""
     code = request.args.get('code')
     state = request.args.get('state')
@@ -2007,52 +2025,86 @@ def verify_mvp_signed_state(state_param):
     except Exception as e:
         return None, f"Invalid state format: {str(e)}"
 
-# Calendar System Endpoints
+
+
 @api.route('/mentor/availability', methods=['GET'])
 @mentor_required
 def get_mentor_availability():
-    """Get current mentor's availability settings"""
+    """Get current mentor's availability settings and unavailability periods"""
     mentor_id = get_jwt_identity()
-    availabilities = MentorAvailability.query.filter_by(
-        mentor_id=mentor_id, 
-        is_active=True
-    ).all()
     
-    settings = CalendarSettings.query.filter_by(mentor_id=mentor_id).first()
-    if not settings:
-        # Create default settings
-        settings = CalendarSettings(mentor_id=mentor_id)
-        db.session.add(settings)
-        db.session.commit()
-    
-    return jsonify({
-        "availabilities": [a.serialize() for a in availabilities],
-        "settings": settings.serialize()
-    }), 200
+    try:
+        # Get availability slots
+        availabilities = MentorAvailability.query.filter_by(
+            mentor_id=mentor_id, 
+            is_active=True
+        ).all()
+        
+        # Get calendar settings
+        settings = CalendarSettings.query.filter_by(mentor_id=mentor_id).first()
+        if not settings:
+            # Create default settings
+            settings = CalendarSettings(mentor_id=mentor_id)
+            db.session.add(settings)
+            db.session.commit()
+        
+        # Get unavailability periods
+        unavailabilities = MentorUnavailability.query.filter_by(
+            mentor_id=mentor_id
+        ).order_by(MentorUnavailability.start_datetime).all()
+        
+        # Convert unavailability times to mentor's timezone for display
+        mentor_timezone = settings.timezone
+        unavailability_data = []
+        
+        for unavail in unavailabilities:
+            # Convert UTC times to mentor's timezone for frontend display
+            start_utc = unavail.start_datetime
+            end_utc = unavail.end_datetime
+            
+            # Ensure timezone-aware
+            if start_utc.tzinfo is None:
+                start_utc = pytz.UTC.localize(start_utc)
+            if end_utc.tzinfo is None:
+                end_utc = pytz.UTC.localize(end_utc)
+            
+            # Convert to mentor's timezone
+            tz = pytz.timezone(mentor_timezone)
+            start_local = start_utc.astimezone(tz)
+            end_local = end_utc.astimezone(tz)
+            
+            unavailability_data.append({
+                "id": unavail.id,
+                "start_datetime": start_local.replace(tzinfo=None).isoformat(),  # Remove timezone for frontend
+                "end_datetime": end_local.replace(tzinfo=None).isoformat(),      # Remove timezone for frontend
+                "reason": unavail.reason or ""
+            })
+        
+        return jsonify({
+            "availabilities": [a.serialize() for a in availabilities],
+            "settings": settings.serialize(),
+            "unavailabilities": unavailability_data
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error getting mentor availability: {str(e)}")
+        return jsonify({"error": "Failed to fetch availability settings"}), 500
+
 
 @api.route('/mentor/availability', methods=['POST'])
 @mentor_required
 def set_mentor_availability():
-    """Set or update mentor's weekly availability"""
+    """Set or update mentor's weekly availability and unavailability periods"""
     mentor_id = get_jwt_identity()
     data = request.get_json()
     
     try:
-        # Clear existing availability
-        MentorAvailability.query.filter_by(mentor_id=mentor_id).delete()
+        current_app.logger.info(f"Received combined availability data for mentor {mentor_id}")
         
-        # Add new availability slots
-        for slot in data.get('availabilities', []):
-            availability = MentorAvailability(
-                mentor_id=mentor_id,
-                day_of_week=slot['day_of_week'],
-                start_time=datetime.strptime(slot['start_time'], '%H:%M').time(),
-                end_time=datetime.strptime(slot['end_time'], '%H:%M').time(),
-                timezone=slot.get('timezone', 'America/Los_Angeles')
-            )
-            db.session.add(availability)
+        # Start transaction
+        db.session.begin()
         
-        # Update settings
+        # 1. Update calendar settings first (we need the timezone)
         settings = CalendarSettings.query.filter_by(mentor_id=mentor_id).first()
         if not settings:
             settings = CalendarSettings(mentor_id=mentor_id)
@@ -2064,14 +2116,78 @@ def set_mentor_availability():
         settings.minimum_notice_hours = data.get('minimum_notice_hours', 24)
         settings.timezone = data.get('timezone', 'America/Los_Angeles')
         
+        # 2. Clear existing availability
+        MentorAvailability.query.filter_by(mentor_id=mentor_id).delete()
+        
+        # 3. Add new availability slots
+        for slot in data.get('availabilities', []):
+            availability = MentorAvailability(
+                mentor_id=mentor_id,
+                day_of_week=slot['day_of_week'],
+                start_time=datetime.strptime(slot['start_time'], '%H:%M').time(),
+                end_time=datetime.strptime(slot['end_time'], '%H:%M').time(),
+                timezone=settings.timezone
+            )
+            db.session.add(availability)
+        
+        # 4. Handle unavailability periods with timezone conversion
+        MentorUnavailability.query.filter_by(mentor_id=mentor_id).delete()
+        
+        # Get mentor's timezone for conversion
+        mentor_timezone = settings.timezone
+        tz = pytz.timezone(mentor_timezone)
+        
+        current_app.logger.info(f"Converting unavailability using timezone: {mentor_timezone}")
+        
+        # Process each unavailability period
+        for unavail_data in data.get('unavailabilities', []):
+            try:
+                # Parse datetime strings (naive - coming from frontend in mentor's timezone)
+                start_str = unavail_data['start_datetime']
+                end_str = unavail_data['end_datetime']
+                
+                # Remove any existing timezone info and parse as naive
+                start_naive = datetime.fromisoformat(start_str.replace('Z', '').replace('+00:00', ''))
+                end_naive = datetime.fromisoformat(end_str.replace('Z', '').replace('+00:00', ''))
+                
+                # Treat as mentor's local time and localize
+                start_local = tz.localize(start_naive)
+                end_local = tz.localize(end_naive)
+                
+                # Convert to UTC for database storage
+                start_utc = start_local.astimezone(pytz.UTC)
+                end_utc = end_local.astimezone(pytz.UTC)
+                
+                # Create unavailability record (no model changes needed)
+                unavailability = MentorUnavailability(
+                    mentor_id=mentor_id,
+                    start_datetime=start_utc.replace(tzinfo=None),  # Store as naive UTC
+                    end_datetime=end_utc.replace(tzinfo=None),      # Store as naive UTC
+                    reason=unavail_data.get('reason', '')
+                )
+                db.session.add(unavailability)
+                
+                current_app.logger.info(f"Converted {start_str} -> {start_utc} UTC")
+                
+            except Exception as unavail_error:
+                current_app.logger.error(f"Error processing unavailability {unavail_data}: {str(unavail_error)}")
+                continue
+        
+        # 5. Commit all changes
         db.session.commit()
         
-        return jsonify({"message": "Availability updated successfully"}), 200
+        current_app.logger.info(f"Successfully saved settings for mentor {mentor_id}")
+        
+        return jsonify({
+            "message": "Availability and unavailability settings updated successfully"
+        }), 200
     
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error updating availability: {str(e)}")
-        return jsonify({"error": "Failed to update availability"}), 500
+        current_app.logger.error(f"Error updating mentor availability: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({"error": "Failed to update availability settings"}), 500
 
 @api.route('/mentor/unavailability', methods=['POST'])
 @mentor_required
@@ -2265,6 +2381,7 @@ def get_available_slots(mentor_id):
 
 
 
+
 @api.route('/finalize-booking', methods=['POST'])
 @jwt_required()
 def finalize_booking():
@@ -2282,6 +2399,7 @@ def finalize_booking():
         payment_intent_id = data.get('paymentIntentId') or data.get('payment_intent_id')
         amount_paid = data.get('amountPaid') or data.get('amount_paid') or data.get('price')
         notes = data.get('notes', '')
+        customer_timezone = data.get('customer_timezone') or data.get('customerTimezone')
         
         current_app.logger.info(f"Extracted data - mentor_id: {mentor_id}, start: {session_start_time}, end: {session_end_time}, payment: {payment_intent_id}, amount: {amount_paid}")
         
@@ -2455,10 +2573,29 @@ def get_mentor_dashboard():
             for booking in completed_bookings
         )
         
-        # For now, using placeholder values for rating and completion rate
-        # You can implement actual rating system later
-        average_rating = 4.5
-        completion_rate = 95
+        # Calculate REAL average rating from customer ratings
+        rated_bookings = Booking.query.filter(
+            Booking.mentor_id == mentor_id,
+            Booking.customer_rating.isnot(None),
+            Booking.status == BookingStatus.COMPLETED
+        ).all()
+        
+        if rated_bookings:
+            total_rating = sum(booking.customer_rating for booking in rated_bookings)
+            average_rating = round(total_rating / len(rated_bookings), 1)
+        else:
+            average_rating = 0.0
+        
+        # Calculate completion rate
+        all_scheduled_sessions = Booking.query.filter(
+            Booking.mentor_id == mentor_id,
+            Booking.status.in_([BookingStatus.COMPLETED, BookingStatus.CANCELLED_BY_CUSTOMER, BookingStatus.CANCELLED_BY_MENTOR])
+        ).count()
+        
+        if all_scheduled_sessions > 0:
+            completion_rate = round((total_sessions / all_scheduled_sessions) * 100, 1)
+        else:
+            completion_rate = 0.0
         
         # Format the upcoming bookings response
         upcoming_data = []
@@ -2486,7 +2623,7 @@ def get_mentor_dashboard():
                 "start_time": booking.session_start_time.isoformat() if booking.session_start_time else None,
                 "duration": booking.session_duration or 60,
                 "status": booking.status.value,
-                "rating": None  # Implement rating system later
+                "rating": booking.customer_rating  # Include the actual rating
             })
         
         return jsonify({
@@ -2495,8 +2632,9 @@ def get_mentor_dashboard():
             "stats": {
                 "totalSessions": total_sessions,
                 "totalHours": round(total_hours, 1),
-                "averageRating": average_rating,
-                "completionRate": completion_rate
+                "averageRating": average_rating,  # Real rating now
+                "completionRate": completion_rate,
+                "totalRatings": len(rated_bookings)  # Add number of ratings received
             }
         }), 200
         
@@ -2505,16 +2643,7 @@ def get_mentor_dashboard():
         import traceback
         current_app.logger.error(traceback.format_exc())
         return jsonify({"error": "Failed to load dashboard data"}), 500
-# WWORKING WITH OPUS BELOW
-# WWORKING WITH OPUS BELOW
-# WWORKING WITH OPUS BELOW
-# WWORKING WITH OPUS BELOW
-## WWORKING WITH OPUS BELOW
-# WWORKING WITH OPUS BELOW
-# WWORKING WITH OPUS BELOW
-# WWORKING WITH OPUS BELOW
-# WWORKING WITH OPUS BELOW
-# WWORKING WITH OPUS BELOW
+
 
 @api.route('/mentor/unavailability', methods=['GET'])
 @mentor_required
@@ -2893,80 +3022,77 @@ def videosdk_webhook():
         }), 500
 
 
-@api.route('/booking/<int:booking_id>/calendar.ics', methods=['GET'])
-@jwt_required()
-def download_booking_calendar(booking_id):
-    """
-    Generate and download an iCalendar (.ics) file for a booking
-    """
-    try:
-        current_user_id = get_jwt_identity()
-        role = get_jwt()['role']
+# @api.route('/booking/<int:booking_id>/calendar.ics', methods=['GET'])
+# @jwt_required()
+# def download_booking_calendar(booking_id):
+#     """
+#     Generate and download an iCalendar (.ics) file for a booking
+#     """
+#     try:
+#         current_user_id = get_jwt_identity()
+#         role = get_jwt()['role']
         
-        # Get the booking
-        booking = Booking.query.get(booking_id)
-        if not booking:
-            return jsonify({"error": "Booking not found"}), 404
+#         # Get the booking
+#         booking = Booking.query.get(booking_id)
+#         if not booking:
+#             return jsonify({"error": "Booking not found"}), 404
         
-        # Check authorization - user must be either the customer or mentor for this booking
-        if role == 'customer' and booking.customer_id != current_user_id:
-            return jsonify({"error": "Unauthorized"}), 403
-        elif role == 'mentor' and booking.mentor_id != current_user_id:
-            return jsonify({"error": "Unauthorized"}), 403
+#         # Check authorization - user must be either the customer or mentor for this booking
+#         if role == 'customer' and booking.customer_id != current_user_id:
+#             return jsonify({"error": "Unauthorized"}), 403
+#         elif role == 'mentor' and booking.mentor_id != current_user_id:
+#             return jsonify({"error": "Unauthorized"}), 403
         
-        # Get mentor and customer details
-        mentor = Mentor.query.get(booking.mentor_id)
-        customer = Customer.query.get(booking.customer_id)
+#         # Get mentor and customer details
+#         mentor = Mentor.query.get(booking.mentor_id)
+#         customer = Customer.query.get(booking.customer_id)
         
-        if not mentor or not customer:
-            return jsonify({"error": "Missing mentor or customer data"}), 404
+#         if not mentor or not customer:
+#             return jsonify({"error": "Missing mentor or customer data"}), 404
         
-        # Generate event details
-        mentor_name = f"{mentor.first_name} {mentor.last_name}"
-        customer_name = f"{customer.first_name} {customer.last_name}"
+#         # Generate event details
+#         mentor_name = f"{mentor.first_name} {mentor.last_name}"
+#         customer_name = f"{customer.first_name} {customer.last_name}"
         
-        event_title = f"DevMentor Session with {mentor_name}"
-        event_description = f"""DevMentor Session
+#         event_title = f"DevMentor Session with {mentor_name}"
+#         event_description = f"""DevMentor Session
 
-Mentor: {mentor_name}
-Customer: {customer_name}
-Duration: {booking.session_duration} minutes
-Booking Reference: #{booking.id}
+# Mentor: {mentor_name}
+# Customer: {customer_name}
+# Duration: {booking.session_duration} minutes
+# Booking Reference: #{booking.id}
 
-Meeting Link: {booking.meeting_url if booking.meeting_url else 'Will be provided before the session'}
+# Meeting Link: {booking.meeting_url if booking.meeting_url else 'Will be provided before the session'}
 
-Questions? Contact {mentor.email}
+# Questions? Contact {mentor.email}
 
-DevMentor Platform"""
+# DevMentor Platform"""
         
-        # Generate iCalendar content
-        ical_content = generate_icalendar_content(
-            event_title=event_title,
-            start_time=booking.session_start_time,
-            end_time=booking.session_end_time,
-            description=event_description,
-            location=booking.meeting_url if booking.meeting_url else "Online"
-        )
+#         # Generate iCalendar content
+#         ical_content = generate_icalendar_content(
+#             event_title=event_title,
+#             start_time=booking.session_start_time,
+#             end_time=booking.session_end_time,
+#             description=event_description,
+#             location=booking.meeting_url if booking.meeting_url else "Online"
+#         )
         
-        # Create the response with proper headers for file download
-        response = Response(
-            ical_content,
-            mimetype='text/calendar',
-            headers={
-                'Content-Disposition': f'attachment; filename=devmentor-session-{booking_id}.ics',
-                'Content-Type': 'text/calendar; charset=utf-8'
-            }
-        )
+#         # Create the response with proper headers for file download
+#         response = Response(
+#             ical_content,
+#             mimetype='text/calendar',
+#             headers={
+#                 'Content-Disposition': f'attachment; filename=devmentor-session-{booking_id}.ics',
+#                 'Content-Type': 'text/calendar; charset=utf-8'
+#             }
+#         )
         
-        return response
+#         return response
         
-    except Exception as e:
-        current_app.logger.error(f"Error generating calendar file for booking {booking_id}: {str(e)}")
-        return jsonify({"error": "Failed to generate calendar file"}), 500
+#     except Exception as e:
+#         current_app.logger.error(f"Error generating calendar file for booking {booking_id}: {str(e)}")
+#         return jsonify({"error": "Failed to generate calendar file"}), 500
 
-
-
-# Replace your current send_booking_confirmation route with this complete version
 
 @api.route('/send-booking-confirmation', methods=['POST'])
 @jwt_required()
@@ -2986,6 +3112,7 @@ def send_booking_confirmation():
         customer_name = data.get('customer_name')
         mentor_name = data.get('mentor_name')
         mentor_email = data.get('mentor_email', '')
+        customer_timezone = data.get('customer_timezone')
         
         # Validate required fields
         if not all([booking_id, customer_email, customer_name, mentor_name]):
@@ -3015,7 +3142,7 @@ def send_booking_confirmation():
         # Get mentor's timezone from calendar settings
         from api.models import CalendarSettings
         calendar_settings = CalendarSettings.query.filter_by(mentor_id=mentor.id).first()
-        mentor_timezone = calendar_settings.timezone if calendar_settings else 'America/Los_Angeles'
+        mentor_timezone = calendar_settings.timezone if calendar_settings else 'America/New_York'
         
         current_app.logger.info(f"Using timezone: {mentor_timezone} for booking {booking_id}")
         
@@ -3031,6 +3158,7 @@ def send_booking_confirmation():
             'mentor_email': mentor.email,
             'customer_email': customer.email,
             'session_duration': booking.session_duration or 60,
+            'customer_timezone': customer_timezone,
             'timezone': mentor_timezone  # ✅ CRITICAL: This timezone info goes to BOTH emails
         }
         
@@ -3102,3 +3230,315 @@ def send_booking_confirmation():
             "success": False,
             "message": "Internal server error"
         }), 500
+
+# Customer Ratings and Finished Sessions
+
+@api.route('/bookings/<int:booking_id>/rate', methods=['POST'])
+@jwt_required()
+def submit_rating(booking_id):
+    """Submit a rating for a session and mark it as completed"""
+    try:
+        current_user_id = get_jwt_identity()
+        role = get_jwt()['role']
+        data = request.get_json()
+        
+        # Only customers can submit ratings
+        if role != 'customer':
+            return jsonify({"success": False, "message": "Only customers can rate sessions"}), 403
+        
+        booking = Booking.query.get(booking_id)
+        if not booking:
+            return jsonify({"success": False, "message": "Booking not found"}), 404
+        
+        # Verify this customer owns this booking
+        if booking.customer_id != current_user_id:
+            return jsonify({"success": False, "message": "Unauthorized"}), 403
+        
+        # Check if booking is in the right status to be rated (confirmed or requires_rating)
+        if booking.status not in [BookingStatus.CONFIRMED, BookingStatus.REQUIRES_RATING]:
+            return jsonify({"success": False, "message": "This session is not ready for rating"}), 400
+        
+        # CRITICAL: Check if already rated - prevent duplicate ratings
+        if booking.customer_rating is not None:
+            return jsonify({"success": False, "message": "This session has already been rated"}), 400
+        
+        # Validate rating
+        rating = data.get('rating')
+        if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
+            return jsonify({"success": False, "message": "Rating must be an integer between 1 and 5"}), 400
+        
+        # Optional customer notes
+        customer_notes = data.get('customer_notes', '')
+        
+        # Update the booking - this is the ONLY place where rating gets set
+        booking.customer_rating = rating
+        booking.customer_notes = customer_notes
+        booking.rating_submitted_at = datetime.utcnow()
+        booking.status = BookingStatus.COMPLETED  # Mark as completed only when rating is submitted
+        
+        db.session.commit()
+        
+        current_app.logger.info(f"Customer {current_user_id} rated booking {booking_id} with {rating} stars and marked it completed")
+        
+        return jsonify({
+            "success": True,
+            "message": "Rating submitted successfully! Session marked as completed.",
+            "booking": booking.serialize_for_customer()
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error submitting rating: {str(e)}")
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to submit rating"}), 500
+
+@api.route('/bookings/<int:booking_id>/mentor-notes', methods=['POST'])
+@jwt_required()
+def add_mentor_notes(booking_id):
+    """Add mentor notes to a session (admin-only visible)"""
+    try:
+        current_user_id = get_jwt_identity()
+        role = get_jwt()['role']
+        data = request.get_json()
+        
+        # Only mentors can add mentor notes
+        if role != 'mentor':
+            return jsonify({"success": False, "message": "Only mentors can add mentor notes"}), 403
+        
+        booking = Booking.query.get(booking_id)
+        if not booking:
+            return jsonify({"success": False, "message": "Booking not found"}), 404
+        
+        # Verify this mentor owns this booking
+        if booking.mentor_id != current_user_id:
+            return jsonify({"success": False, "message": "Unauthorized"}), 403
+        
+        mentor_notes = data.get('mentor_notes', '')
+        
+        # Update the booking
+        booking.mentor_notes = mentor_notes
+        db.session.commit()
+        
+        current_app.logger.info(f"Mentor {current_user_id} added notes to booking {booking_id}")
+        
+        return jsonify({
+            "success": True,
+            "message": "Notes added successfully",
+            "booking": booking.serialize_for_mentor()
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error adding mentor notes: {str(e)}")
+        return jsonify({"success": False, "message": "Failed to add notes"}), 500
+
+
+@api.route('/mentor/<int:mentor_id>/ratings', methods=['GET'])
+def get_mentor_ratings(mentor_id):
+    """Get mentor's rating statistics"""
+    try:
+        # Get all completed bookings with ratings for this mentor
+        rated_bookings = Booking.query.filter(
+            Booking.mentor_id == mentor_id,
+            Booking.customer_rating.isnot(None),
+            Booking.status == BookingStatus.COMPLETED
+        ).all()
+        
+        total_reviews = len(rated_bookings)
+        
+        # Only show ratings if mentor has 5+ reviews
+        if total_reviews < 5:
+            return jsonify({
+                "success": True,
+                "message": "Not enough reviews to display ratings",
+                "total_reviews": total_reviews,
+                "minimum_required": 5
+            }), 200
+        
+        # Calculate average rating
+        total_rating = sum(booking.customer_rating for booking in rated_bookings)
+        average_rating = round(total_rating / total_reviews, 1)
+        
+        # Calculate rating distribution
+        rating_distribution = {str(i): 0 for i in range(1, 6)}
+        for booking in rated_bookings:
+            rating_distribution[str(booking.customer_rating)] += 1
+        
+        return jsonify({
+            "success": True,
+            "average_rating": average_rating,
+            "total_reviews": total_reviews,
+            "rating_distribution": rating_distribution
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error getting mentor ratings: {str(e)}")
+        return jsonify({"success": False, "message": "Failed to get ratings"}), 500
+
+
+@api.route('/customer/sessions', methods=['GET'])
+@jwt_required()
+def get_customer_sessions():
+    """Get customer's sessions split by current and history"""
+    try:
+        current_user_id = get_jwt_identity()
+        role = get_jwt()['role']
+        
+        if role != 'customer':
+            return jsonify({"success": False, "message": "Only customers can access this endpoint"}), 403
+        
+        # Get all bookings for this customer
+        all_bookings = Booking.query.filter_by(customer_id=current_user_id).all()
+        
+        # Split into current (PAID, REQUIRES_RATING) and history (COMPLETED)
+        current_sessions = []
+        session_history = []
+        
+        for booking in all_bookings:
+            if booking.status in [BookingStatus.PAID, BookingStatus.CONFIRMED, BookingStatus.REQUIRES_RATING]:
+                current_sessions.append(booking.serialize_for_customer())
+            elif booking.status == BookingStatus.COMPLETED:
+                session_history.append(booking.serialize_for_customer())
+        
+        return jsonify({
+            "success": True,
+            "current_sessions": current_sessions,
+            "session_history": session_history
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error getting customer sessions: {str(e)}")
+        return jsonify({"success": False, "message": "Failed to get sessions"}), 500
+
+
+@api.route('/mentor/sessions', methods=['GET'])
+@jwt_required()
+def get_mentor_sessions():
+    """Get mentor's sessions split by current and history"""
+    try:
+        current_user_id = get_jwt_identity()
+        role = get_jwt()['role']
+        
+        if role != 'mentor':
+            return jsonify({"success": False, "message": "Only mentors can access this endpoint"}), 403
+        
+        # Get all bookings for this mentor
+        all_bookings = Booking.query.filter_by(mentor_id=current_user_id).all()
+        
+        # Split into current (PAID, REQUIRES_RATING) and history (COMPLETED)
+        current_sessions = []
+        session_history = []
+        
+        for booking in all_bookings:
+            if booking.status in [BookingStatus.PAID, BookingStatus.CONFIRMED, BookingStatus.REQUIRES_RATING]:
+                current_sessions.append(booking.serialize_for_mentor())
+            elif booking.status == BookingStatus.COMPLETED:
+                session_history.append(booking.serialize_for_mentor())
+        
+        return jsonify({
+            "success": True,
+            "current_sessions": current_sessions,
+            "session_history": session_history
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error getting mentor sessions: {str(e)}")
+        return jsonify({"success": False, "message": "Failed to get sessions"}), 500
+
+@api.route('/bookings/<int:booking_id>/finish', methods=['POST'])
+@jwt_required()
+def finish_session(booking_id):
+    """Mark a session as finished - changes status to requires_rating for mentors only"""
+    try:
+        current_user_id = get_jwt_identity()
+        role = get_jwt()['role']
+        
+        booking = Booking.query.get(booking_id)
+        if not booking:
+            return jsonify({"success": False, "message": "Booking not found"}), 404
+        
+        # Verify this user has permission to finish this booking
+        if role == 'customer' and booking.customer_id != current_user_id:
+            return jsonify({"success": False, "message": "Unauthorized"}), 403
+        elif role == 'mentor' and booking.mentor_id != current_user_id:
+            return jsonify({"success": False, "message": "Unauthorized"}), 403
+        
+        # Check if booking is in the right status to be finished
+        if booking.status != BookingStatus.CONFIRMED:
+            return jsonify({"success": False, "message": "This session cannot be finished from its current status"}), 400
+        
+        # UPDATED: Different behavior for customers vs mentors
+        if role == 'customer':
+            # For customers: Don't change status in DB - this is handled by the frontend
+            # The rating modal will handle the completion
+            return jsonify({
+                "success": True,
+                "message": "Ready to rate session",
+                "booking": booking.serialize_for_customer()
+            }), 200
+        else:
+            # For mentors: Change status to requires_rating
+            booking.status = BookingStatus.REQUIRES_RATING
+            db.session.commit()
+            
+            current_app.logger.info(f"Session {booking_id} marked as finished by mentor {current_user_id}")
+            
+            return jsonify({
+                "success": True,
+                "message": "Session marked as complete! Customer will be prompted to rate.",
+                "booking": booking.serialize_for_mentor()
+            }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error finishing session: {str(e)}")
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to finish session"}), 500
+
+@api.route('/bookings/<int:booking_id>/flag', methods=['POST'])
+@jwt_required()
+def flag_session(booking_id):
+    """Flag a session for review"""
+    try:
+        current_user_id = get_jwt_identity()
+        role = get_jwt()['role']
+        
+        booking = Booking.query.get(booking_id)
+        if not booking:
+            return jsonify({"success": False, "message": "Booking not found"}), 404
+        
+        # Verify this user has permission to flag this booking
+        if role == 'customer' and booking.customer_id != current_user_id:
+            return jsonify({"success": False, "message": "Unauthorized"}), 403
+        elif role == 'mentor' and booking.mentor_id != current_user_id:
+            return jsonify({"success": False, "message": "Unauthorized"}), 403
+        
+        # Toggle the appropriate flag
+        if role == 'customer':
+            booking.flagged_by_customer = not booking.flagged_by_customer
+            flag_status = "flagged" if booking.flagged_by_customer else "unflagged"
+        else:  # mentor
+            booking.flagged_by_mentor = not booking.flagged_by_mentor
+            flag_status = "flagged" if booking.flagged_by_mentor else "unflagged"
+        
+        db.session.commit()
+        
+        current_app.logger.info(f"Session {booking_id} {flag_status} by {role} {current_user_id}")
+        
+        # Return the appropriate response based on user type
+        if role == 'customer':
+            return jsonify({
+                "success": True,
+                "message": f"Session {flag_status} for review",
+                "flagged": booking.flagged_by_customer,
+                "booking": booking.serialize_for_customer()
+            }), 200
+        else:  # mentor
+            return jsonify({
+                "success": True,
+                "message": f"Session {flag_status} for review", 
+                "flagged": booking.flagged_by_mentor,
+                "booking": booking.serialize_for_mentor()
+            }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error flagging session: {str(e)}")
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to flag session"}), 500

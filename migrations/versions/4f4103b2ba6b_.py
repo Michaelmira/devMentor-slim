@@ -1,8 +1,8 @@
 """empty message
 
-Revision ID: 20a2ed0943a2
+Revision ID: 4f4103b2ba6b
 Revises: 
-Create Date: 2025-06-25 07:14:51.681339
+Create Date: 2025-08-20 17:00:34.800558
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '20a2ed0943a2'
+revision = '4f4103b2ba6b'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -34,7 +34,7 @@ def upgrade():
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_customer_email'), 'customer', ['email'], unique=True)
-    op.create_index(op.f('ix_customer_phone'), 'customer', ['phone'], unique=True)
+    op.create_index(op.f('ix_customer_phone'), 'customer', ['phone'], unique=False)
     op.create_table('mentor',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('email', sa.String(length=120), nullable=False),
@@ -51,12 +51,14 @@ def upgrade():
     sa.Column('about_me', sa.String(length=2500), nullable=True),
     sa.Column('years_exp', sa.String(length=30), nullable=True),
     sa.Column('skills', sa.ARRAY(sa.String(length=255)), nullable=True),
-    sa.Column('days', sa.ARRAY(sa.String(length=255)), nullable=True),
     sa.Column('price', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('date_joined', sa.DateTime(timezone=True), nullable=True),
     sa.Column('google_oauth_credentials', sa.Text(), nullable=True),
     sa.Column('is_verified', sa.Boolean(), nullable=False),
     sa.Column('verification_code', sa.String(length=6), nullable=True),
+    sa.Column('linkedin_url', sa.String(length=500), nullable=True),
+    sa.Column('github_url', sa.String(length=500), nullable=True),
+    sa.Column('specialties', sa.ARRAY(sa.String(length=255)), nullable=True),
     sa.Column('stripe_account_id', sa.String(length=255), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('stripe_account_id')
@@ -83,12 +85,18 @@ def upgrade():
     sa.Column('currency', sa.String(length=10), nullable=True),
     sa.Column('platform_fee', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('mentor_payout_amount', sa.Numeric(precision=10, scale=2), nullable=True),
-    sa.Column('status', sa.Enum('PENDING_PAYMENT', 'PAID', 'CONFIRMED', 'CANCELLED_BY_CUSTOMER', 'CANCELLED_BY_MENTOR', 'COMPLETED', 'REFUNDED', name='bookingstatus'), nullable=False),
+    sa.Column('status', sa.Enum('PENDING_PAYMENT', 'PAID', 'CONFIRMED', 'CANCELLED_BY_CUSTOMER', 'CANCELLED_BY_MENTOR', 'COMPLETED', 'REFUNDED', 'REQUIRES_RATING', name='bookingstatus'), nullable=False),
     sa.Column('google_meet_link', sa.String(length=255), nullable=True),
     sa.Column('meeting_id', sa.String(length=100), nullable=True),
     sa.Column('meeting_url', sa.String(length=500), nullable=True),
     sa.Column('meeting_token', sa.Text(), nullable=True),
     sa.Column('recording_url', sa.String(length=500), nullable=True),
+    sa.Column('customer_rating', sa.Integer(), nullable=True),
+    sa.Column('customer_notes', sa.Text(), nullable=True),
+    sa.Column('mentor_notes', sa.Text(), nullable=True),
+    sa.Column('rating_submitted_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('flagged_by_customer', sa.Boolean(), nullable=False),
+    sa.Column('flagged_by_mentor', sa.Boolean(), nullable=False),
     sa.ForeignKeyConstraint(['customer_id'], ['customer.id'], ),
     sa.ForeignKeyConstraint(['mentor_id'], ['mentor.id'], ),
     sa.PrimaryKeyConstraint('id'),

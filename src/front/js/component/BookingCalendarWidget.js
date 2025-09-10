@@ -11,7 +11,24 @@ const BookingCalendarWidget = ({ mentorId, mentorName, onSelectSlot, backendUrl 
     const [selectedDate, setSelectedDate] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [timezone, setTimezone] = useState('America/Los_Angeles');
+    
+    // Mentor's timezone (from backend)
+    const [mentorTimezone, setMentorTimezone] = useState('America/New_York');
+    
+    // Customer's timezone (auto-detected)
+    const [customerTimezone, setCustomerTimezone] = useState('America/New_York');
+
+    useEffect(() => {
+        // Auto-detect customer's timezone on component mount
+        try {
+            const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            setCustomerTimezone(detectedTimezone);
+            console.log('Auto-detected customer timezone:', detectedTimezone);
+        } catch (error) {
+            console.warn('Failed to detect timezone, using default EST:', error);
+            setCustomerTimezone('America/New_York');
+        }
+    }, []);
 
     useEffect(() => {
         fetchAvailableSlots();
@@ -43,7 +60,7 @@ const BookingCalendarWidget = ({ mentorId, mentorName, onSelectSlot, backendUrl 
             const data = await response.json();
             console.log('Available slots response:', data);
             setAvailableSlots(data.available_slots || []);
-            setTimezone(data.timezone || 'America/Los_Angeles');
+            setMentorTimezone(data.timezone || 'America/New_York'); // Store mentor's timezone
         } catch (err) {
             setError('Failed to load available time slots. Please try again later.');
             console.error('Error fetching slots:', err);
@@ -95,14 +112,15 @@ const BookingCalendarWidget = ({ mentorId, mentorName, onSelectSlot, backendUrl 
             ...slot,
             // Ensure we have all required fields
             date: format(startTime, 'yyyy-MM-dd'), // YYYY-MM-DD format
-            start_time: slot.start_time, // ISO datetime string from backend
-            end_time: slot.end_time, // ISO datetime string from backend
+            start_time: slot.start_time, // ISO datetime string from backend (UTC)
+            end_time: slot.end_time, // ISO datetime string from backend (UTC)
             duration: slot.duration || durationMinutes || 60, // Duration in minutes
-            timezone: timezone,
-            // Additional useful data
+            mentor_timezone: mentorTimezone, // Mentor's timezone
+            customer_timezone: customerTimezone, // Customer's timezone
+            // Additional display data in customer's timezone
             formatted_date: format(startTime, 'EEEE, MMMM d, yyyy'),
-            formatted_start_time: format(utcToZonedTime(startTime, timezone), 'h:mm a'),
-            formatted_end_time: format(utcToZonedTime(endTime, timezone), 'h:mm a'),
+            formatted_start_time: format(utcToZonedTime(startTime, customerTimezone), 'h:mm a'),
+            formatted_end_time: format(utcToZonedTime(endTime, customerTimezone), 'h:mm a'),
         };
         
         console.log("Passing complete slot data:", completeSlot);
@@ -208,6 +226,23 @@ const BookingCalendarWidget = ({ mentorId, mentorName, onSelectSlot, backendUrl 
         });
     };
 
+    // Helper function to get timezone abbreviation
+    const getTimezoneAbbreviation = (timezone) => {
+        try {
+            const now = new Date();
+            const formatter = new Intl.DateTimeFormat('en', {
+                timeZone: timezone,
+                timeZoneName: 'short'
+            });
+            const parts = formatter.formatToParts(now);
+            const timeZonePart = parts.find(part => part.type === 'timeZoneName');
+            return timeZonePart ? timeZonePart.value : timezone;
+        } catch (error) {
+            console.warn('Failed to get timezone abbreviation:', error);
+            return timezone;
+        }
+    };
+
     if (loading) {
         return (
             <div className="d-flex justify-content-center align-items-center p-4">
@@ -228,6 +263,18 @@ const BookingCalendarWidget = ({ mentorId, mentorName, onSelectSlot, backendUrl 
 
     return (
         <div className="booking-calendar">
+            {/* Timezone Display */}
+            <div className="timezone-info mb-3">
+                <small className="text-muted">
+                    <strong>Times shown in your local timezone:</strong> {getTimezoneAbbreviation(customerTimezone)}
+                    {customerTimezone !== mentorTimezone && (
+                        <span className="text-info ms-2">
+                            (Mentor is in {getTimezoneAbbreviation(mentorTimezone)})
+                        </span>
+                    )}
+                </small>
+            </div>
+
             {/* Month Navigation */}
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <button
@@ -248,43 +295,41 @@ const BookingCalendarWidget = ({ mentorId, mentorName, onSelectSlot, backendUrl 
             </div>
 
             {/* Show message if no slots are available */}
-            {!loading && availableSlots.length === 0 && !error && (
-                <div className="alert alert-info" role="alert">
-                    <h5 className="alert-heading">No Available Time Slots</h5>
-                    <p>This mentor hasn't set up any available time slots for {format(currentDate, 'MMMM yyyy')}.</p>
-                    <hr />
-                    <p className="mb-0">Try checking other months or contact the mentor directly.</p>
+            {availableSlots.length === 0 ? (
+                <div className="alert alert-info">
+                    <h5>No Available Times</h5>
+                    <p className="mb-0">
+                        {mentorName} doesn't have any available slots this month. 
+                        Try selecting a different month or contact the mentor directly.
+                    </p>
                 </div>
-            )}
-
-            {/* Calendar Grid */}
-            {availableSlots.length > 0 && (
+            ) : (
                 <>
+                    {/* Calendar Grid - Using existing CSS classes */}
                     <div className="calendar-grid mb-4">
-                        {/* Weekday Headers */}
+                        {/* Weekday Headers - Simple Bootstrap row approach */}
                         <div className="row mb-2">
                             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
                                 <div key={day} className="col text-center">
-                                    <small className="text-muted">{day}</small>
+                                    <small className="text-muted font-weight-bold">{day}</small>
                                 </div>
                             ))}
                         </div>
 
-                        {/* Calendar Days */}
+                        {/* Calendar Days - Using existing CSS class */}
                         <div className="calendar-days">
-                            {getDaysInMonth().map((date, index) => {
+                            {getDaysInMonth().map(date => {
                                 const daySlots = getAvailableSlotsForDate(date);
-                                const isSelected = selectedDate && isSameDay(date, selectedDate);
                                 const hasSlots = daySlots.length > 0;
                                 const unavailable = isDateUnavailable(date);
                                 const unavailability = getUnavailabilityForDate(date);
+                                const isSelected = selectedDate && isSameDay(date, selectedDate);
 
                                 return (
                                     <div
-                                        key={date.toISOString()}
-                                        className={`calendar-day ${isSelected ? 'selected' : ''} ${hasSlots ? 'has-slots' : ''} ${unavailable ? 'unavailable' : ''}`}
+                                        key={date.toString()}
+                                        className={`calendar-day ${isSelected ? 'selected' : ''} ${hasSlots ? 'has-slots' : ''} ${unavailable && !hasSlots ? 'unavailable' : ''}`}
                                         onClick={() => hasSlots && handleDateClick(date)}
-                                        style={{ cursor: hasSlots ? 'pointer' : 'default' }}
                                         title={unavailable && unavailability?.reason ? `Unavailable: ${unavailability.reason}` : ''}
                                     >
                                         <span className="day-number">{format(date, 'd')}</span>
@@ -302,7 +347,7 @@ const BookingCalendarWidget = ({ mentorId, mentorName, onSelectSlot, backendUrl 
                         </div>
                     </div>
 
-                    {/* Legend */}
+                    {/* Legend - Using existing CSS classes */}
                     <div className="calendar-legend mb-3">
                         <small className="text-muted d-flex align-items-center gap-3">
                             <span><span className="legend-dot available"></span> Available</span>
@@ -315,11 +360,15 @@ const BookingCalendarWidget = ({ mentorId, mentorName, onSelectSlot, backendUrl 
                         <div className="time-slots">
                             <h5 className="mb-3">
                                 Available Times for {format(selectedDate, 'EEEE, MMMM d, yyyy')}
+                                <small className="text-muted ms-2">
+                                    (in your local time: {getTimezoneAbbreviation(customerTimezone)})
+                                </small>
                             </h5>
                             <div className="row g-2">
                                 {getAvailableSlotsForDate(selectedDate).map((slot, index) => {
-                                    const startTime = utcToZonedTime(new Date(slot.start_time), timezone);
-                                    const endTime = utcToZonedTime(new Date(slot.end_time), timezone);
+                                    // Convert UTC times to customer's local timezone for display
+                                    const startTime = utcToZonedTime(new Date(slot.start_time), customerTimezone);
+                                    const endTime = utcToZonedTime(new Date(slot.end_time), customerTimezone);
 
                                     return (
                                         <div key={index} className="col-md-4">
@@ -328,6 +377,11 @@ const BookingCalendarWidget = ({ mentorId, mentorName, onSelectSlot, backendUrl 
                                                 onClick={() => handleSlotSelect(slot)}
                                             >
                                                 {format(startTime, 'h:mm a')} - {format(endTime, 'h:mm a')}
+                                                {customerTimezone !== mentorTimezone && (
+                                                    <div className="small text-muted">
+                                                        ({format(utcToZonedTime(new Date(slot.start_time), mentorTimezone), 'h:mm a')} {getTimezoneAbbreviation(mentorTimezone)})
+                                                    </div>
+                                                )}
                                             </button>
                                         </div>
                                     );
