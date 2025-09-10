@@ -119,10 +119,8 @@ class Mentor(db.Model):
             "portfolio_photos": [portfolio_photo.serialize() for portfolio_photo in self.portfolio_photos] if self.portfolio_photos is not None else [],
             "about_me": self.about_me,
             "price": str(self.price),
-
             "linkedin_url": self.linkedin_url,
-            "github_url": self.github_url
-
+            "github_url": self.github_url,
             "specialties": [specialty for specialty in self.specialties]
         }
 

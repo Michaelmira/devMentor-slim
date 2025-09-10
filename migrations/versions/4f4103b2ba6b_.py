@@ -1,8 +1,8 @@
 """empty message
 
-Revision ID: 2f12097bbdac
+Revision ID: 4f4103b2ba6b
 Revises: 
-Create Date: 2025-08-06 23:33:58.292747
+Create Date: 2025-08-20 17:00:34.800558
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '2f12097bbdac'
+revision = '4f4103b2ba6b'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -56,6 +56,8 @@ def upgrade():
     sa.Column('google_oauth_credentials', sa.Text(), nullable=True),
     sa.Column('is_verified', sa.Boolean(), nullable=False),
     sa.Column('verification_code', sa.String(length=6), nullable=True),
+    sa.Column('linkedin_url', sa.String(length=500), nullable=True),
+    sa.Column('github_url', sa.String(length=500), nullable=True),
     sa.Column('specialties', sa.ARRAY(sa.String(length=255)), nullable=True),
     sa.Column('stripe_account_id', sa.String(length=255), nullable=True),
     sa.PrimaryKeyConstraint('id'),
