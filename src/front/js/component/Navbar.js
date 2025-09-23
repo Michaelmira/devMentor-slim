@@ -33,7 +33,7 @@ export const Navbar = () => {
 			<nav className="navbar navbar-light bg-light bg-opacity-50 pt-3 p-0">
 				<div className="container">
 					<Link to="/" className="navbar-link">
-						<span className="dancing-script-text"><img src="https://res.cloudinary.com/dufs8hbca/image/upload/v1753311566/Saved/GatherDoneNoBG.png" style={{width:"150px"}}/></span>
+						<span className="dancing-script-text"><img src="https://res.cloudinary.com/dufs8hbca/image/upload/v1753311566/Saved/GatherDoneNoBG.png" style={{ width: "150px" }} /></span>
 					</Link>
 					<div className="d-flex gap-2">
 
@@ -51,7 +51,7 @@ export const Navbar = () => {
 												<i className="fa-solid fa-chalkboard" />
 											</Link>
 											<Link to="/mentor-list" className="dropdown-item bold-text text-end">
-												<span className="navbarFont">Find A Mentor</span>
+												<span className="navbarFont">Find A Specialisst</span>
 												<i className="fa-solid fa-folder-plus" />
 											</Link>
 											<button className="dropdown-item bold-text text-end" onClick={handleLogout}>
@@ -91,11 +91,11 @@ export const Navbar = () => {
 									{store.isMentorLoggedIn ? (
 										<>
 											<Link to="/mentor-dashboard" className="dropdown-item bold-text text-end" >
-												<span className="navbarFont">Mentor Dashboard</span>
+												<span className="navbarFont">Specialist Dashboard</span>
 												<i className="fa-solid fa-chalkboard" />
 											</Link>
 											<Link to="./mentor-profile" className="dropdown-item bold-text text-end">
-												<span className="navbarFont">Mentor Profile</span>
+												<span className="navbarFont">Specialist Profile</span>
 												<i className="fa-solid fa-user" />
 											</Link>
 											<button className="dropdown-item bold-text text-end" onClick={handleLogout}>
@@ -109,7 +109,7 @@ export const Navbar = () => {
 												className="dropdown-item bold-text text-end"
 												onClick={() => handleShowMentorAuth('signup')}
 											>
-												<span className="navbarFont">Mentor Sign Up</span>
+												<span className="navbarFont">Specialist Sign Up</span>
 												<i className="fa-solid fa-user-plus" />
 											</button>
 											<button

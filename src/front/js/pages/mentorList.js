@@ -227,7 +227,7 @@ export const MentorList = () => {
                     <Link to={`/mentor-details/${mentor.id}`} className="text-decoration-none text-dark">
                       <div className="d-grid gap-2">
                         <div className="btn btn-primary">
-                          Book this Mentor Now!
+                          Book this Specialist Now!
                         </div>
                       </div>
                     </Link>

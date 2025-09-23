@@ -245,7 +245,7 @@ export const MentorList = () => {
                         {/* Static "Book this Mentor" text instead of button */}
                         <div className="d-grid gap-2">
                           <div className="btn btn-primary">
-                            Book this Mentor Now!
+                            Book this specialist Now!
                           </div>
                         </div>
                       </div>
@@ -259,8 +259,8 @@ export const MentorList = () => {
       </div>
 
       <section className="mt-5">
-        <h1 className="text-center mb-2">Find Your Coding Mentor</h1>
-        <p className="text-center mb-3">Get guidance from experienced developers</p>
+        <h1 className="text-center mb-2">Find Your Specialist</h1>
+        <p className="text-center mb-3">Get guidance from experienced experts</p>
 
         <SpecialtyFilter
           allMentors={store.mentors}

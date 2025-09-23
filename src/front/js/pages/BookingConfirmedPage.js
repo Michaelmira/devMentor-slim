@@ -280,7 +280,7 @@ export const BookingConfirmedPage = () => {
                                     Go to Dashboard
                                 </Link>
                                 <Link to="/mentor-list" className="btn btn-outline-secondary btn-lg mb-2">
-                                    Find Another Mentor
+                                    Find Another Specialist
                                 </Link>
                             </div>
                         </div>
