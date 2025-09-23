@@ -11,8 +11,10 @@ export const Home = () => {
 		<div className="homepage">
 			<header className="container hero">
 				<div className="container">
-					<h1 className="header-background">Learn from the best. Find your specialist.</h1>
-					<p className="lead header-background text-white">Gather Done is the easiest way to connect with experienced developers for one-on-one mentorship. Whether you're new to coding or an experienced developer looking to level up, we'll help you find the perfect mentor.</p>
+					<h1 className="header-background">Get help from the best. Find your specialist.</h1>
+					<p className="lead header-background font-weight-bold">GatherDone connects you with skilled specialists to help you get things done. From coding and product management to business strategy, marketing, and even resume upgrades, our experts provide one-on-one support tailored to your goals. Whether you need mentorship, hands-on help, or professional guidance, GatherDone makes it easy to move your projects — and career — forward.
+
+					</p>
 
 					<div className="search-container">
 						<a
@@ -67,7 +69,7 @@ export const Home = () => {
 
 				<section className="featured-mentors">
 				<div className="container">
-					<h2>Featured mentors</h2>
+					<h2>Featured specialist</h2>
 					<div className="mentor-stats">
 						<div className="stat-item">
 							<h3>5,000</h3>

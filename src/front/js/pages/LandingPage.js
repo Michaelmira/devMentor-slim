@@ -105,19 +105,16 @@ const LandingPage = () => {
     <div className="bg-light min-vh-100">
       <header className=" hero">
         
-          <h1 className="header-background">Learn from the best. Find your specialist.</h1>
+          <h1 className="header-background">Work smarter. Find your specialist.</h1>
           <p className="lead header-background text-white">
-            Gather Done is the easiest way to connect with experienced developers
-            for one-on-one mentorship. Whether you're new to coding or an
-            experienced developer looking to level up, we'll help you find the
-            perfect mentor.
+            GatherDone connects you with skilled specialists to help you get things done. From coding and product management to business strategy, marketing, and even resume upgrades, our experts provide one-on-one support tailored to your goals. Whether you need mentorship, hands-on help, or professional guidance, GatherDone makes it easy to move your projects — and career — forward.
           </p>
         
       </header>
 
       <section className="featured-mentors">
         <div className="container">
-          <h2>Featured mentors</h2>
+          <h2>Featured specialist</h2>
           <div
             id="featuredCarousel"
             className="carousel slide w-75 mx-auto mb-5"

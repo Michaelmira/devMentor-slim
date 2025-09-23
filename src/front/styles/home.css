@@ -10,7 +10,7 @@
     background-repeat: no-repeat;
     color: white;
     padding: 100px 0;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 1.5);
   margin-bottom: 80px;
   }
   
@@ -21,7 +21,7 @@
   }
   
   .hero .lead {
-    font-size: 18px;
+    font-size: 20px;
     color: #6c757d;
     max-width: 800px;
     margin: 0 auto 30px;
@@ -189,7 +189,7 @@
   }
   
   .header-background {
-    background-color: rgba(0, 0, 0, 0.075);
+    background-color: rgba(0, 0, 0, 0.2);
     /* Dark background with 50% opacity */
     padding: 20px;
     /* Optional: Add some padding for better spacing */
