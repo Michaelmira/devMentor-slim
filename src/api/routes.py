@@ -226,7 +226,7 @@ def forgot_password():
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #333;">Password Reset Request</h2>
             <p>Hello {user.first_name},</p>
-            <p>We received a request to reset your password for your devMentor account. If you didn't make this request, you can safely ignore this email.</p>
+            <p>We received a request to reset your password for your Gather Done account. If you didn't make this request, you can safely ignore this email.</p>
             <p>To reset your password, please click the button below:</p>
             <div style="text-align: center; margin: 30px 0;">
                 <a href="{reset_link}" 
@@ -243,14 +243,14 @@ def forgot_password():
             <p>If you're having trouble clicking the button, you can also copy and paste the link from the button into your browser.</p>
             <p style="margin-top: 30px; color: #666; font-size: 12px;">
                 Best regards,<br>
-                The devMentor Team
+                The Gather Done Team
             </p>
         </div>
     </body>
     </html>
     """
     
-    send_email(email, email_html, "Password Reset Request: devMentor")
+    send_email(email, email_html, "Password Reset Request: Gather Done")
     return jsonify({"message": "Recovery password email has been sent!"}), 200
 
 @api.route("/reset-password/<token>", methods=["PUT"])
@@ -3054,8 +3054,8 @@ def videosdk_webhook():
 #         mentor_name = f"{mentor.first_name} {mentor.last_name}"
 #         customer_name = f"{customer.first_name} {customer.last_name}"
         
-#         event_title = f"DevMentor Session with {mentor_name}"
-#         event_description = f"""DevMentor Session
+#         event_title = f"Gather Done Session with {mentor_name}"
+#         event_description = f"""Gather Done Session
 
 # Mentor: {mentor_name}
 # Customer: {customer_name}
@@ -3066,7 +3066,7 @@ def videosdk_webhook():
 
 # Questions? Contact {mentor.email}
 
-# DevMentor Platform"""
+# Gather Done Platform"""
         
 #         # Generate iCalendar content
 #         ical_content = generate_icalendar_content(
@@ -3082,7 +3082,7 @@ def videosdk_webhook():
 #             ical_content,
 #             mimetype='text/calendar',
 #             headers={
-#                 'Content-Disposition': f'attachment; filename=devmentor-session-{booking_id}.ics',
+#                 'Content-Disposition': f'attachment; filename=Gather Done-session-{booking_id}.ics',
 #                 'Content-Type': 'text/calendar; charset=utf-8'
 #             }
 #         )

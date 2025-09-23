@@ -47,17 +47,17 @@ def send_verification_email_code(to_email, code):
     """
     Sends a verification email with a 6-digit code.
     """
-    subject = "devMentor - Your Verification Code"
+    subject = "Gather Done - Your Verification Code"
     html_content = f"""
     <div style="font-family: Arial, sans-serif; color: #333;">
-        <h2>Welcome to devMentor!</h2>
+        <h2>Welcome to Gather Done!</h2>
         <p>Your verification code is:</p>
         <p style="font-size: 24px; font-weight: bold; letter-spacing: 2px;">{code}</p>
         <p>Please use this code to complete your registration.</p>
         <p>If you did not request this, please ignore this email.</p>
         <br>
         <p>Best,</p>
-        <p>The devMentor Team</p>
+        <p>The Gather Done Team</p>
     </div>
     """
     return send_email(to_email, subject, html_content)
@@ -253,7 +253,7 @@ def send_booking_confirmation_email(customer_email, customer_name, mentor_name, 
     print(f"DEBUG: Secondary display: {timezone_info['secondary_display']}")
     
     # Generate calendar URLs using UTC times
-    event_title = f"DevMentor Session with {mentor_name}"
+    event_title = f"Gather Done Session with {mentor_name}"
     event_description = f"""
 Your mentoring session with {mentor_name} is confirmed!
 
@@ -266,7 +266,7 @@ Meeting Link: {meeting_url if meeting_url else 'Will be provided before the sess
 
 Questions? Contact {mentor_email}
 
-DevMentor Platform
+Gather Done Platform
     """.strip()
     
     # Get all calendar URLs (using original UTC times for calendar systems)
@@ -465,14 +465,14 @@ DevMentor Platform
                 
                 <p style="color: #666;">
                     Best regards,<br>
-                    <strong>The DevMentor Team</strong>
+                    <strong>The Gather Done Team</strong>
                 </p>
             </div>
             
             <div class="footer">
                 <p style="margin: 0; font-size: 14px;">
                     This email was sent to {customer_email}<br>
-                    © 2025 DevMentor. All rights reserved.
+                    © 2025 Gather Done. All rights reserved.
                 </p>
             </div>
         </div>
@@ -502,7 +502,7 @@ def send_mentor_booking_notification_email(mentor_email, mentor_name, customer_n
     timezone_info = format_dynamic_timezone_display(session_start_time, session_end_time, customer_timezone)
     
     # Generate calendar URLs for mentor (using UTC times for calendar)
-    event_title = f"DevMentor Session with {customer_name}"
+    event_title = f"Gather Done Session with {customer_name}"
     event_description = f"""
 Mentoring session with {customer_name}
 
@@ -515,7 +515,7 @@ Session Details:
 
 Meeting Link: {meeting_url if meeting_url else 'Create meeting room in dashboard'}
 
-DevMentor Platform
+Gather Done Platform
     """.strip()
     
     # Get calendar URLs
@@ -848,14 +848,14 @@ DevMentor Platform
                 
                 <p style="color: #666;">
                     Best regards,<br>
-                    <strong>The DevMentor Team</strong>
+                    <strong>The Gather Done Team</strong>
                 </p>
             </div>
             
             <div class="footer">
                 <p style="margin: 0; font-size: 14px;">
                     This email was sent to {mentor_email}<br>
-                    © 2025 DevMentor. All rights reserved.
+                    © 2025 Gather Done. All rights reserved.
                 </p>
             </div>
         </div>

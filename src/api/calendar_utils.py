@@ -1,6 +1,6 @@
 # src/api/calendar_utils.py
 """
-Google Calendar integration utilities for DevMentor platform
+Google Calendar integration utilities for Gather Done platform
 """
 
 import urllib.parse
@@ -165,7 +165,7 @@ def generate_icalendar_content(event_title, start_time, end_time, description=""
     
     ical_content = f"""BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//DevMentor//DevMentor Platform//EN
+PRODID:-//Gather Done//Gather Done Platform//EN
 BEGIN:VEVENT
 UID:{uid}
 DTSTAMP:{created_formatted}

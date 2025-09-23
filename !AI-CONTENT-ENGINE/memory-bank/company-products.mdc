@@ -4,7 +4,7 @@ globs:
 alwaysApply: false
 ---
 ---
-title: "DevMentor Product Documentation"
+title: "Gather Done Product Documentation"
 description: "Comprehensive product overview and market positioning"
 version: "1.0"
 created: "2025-06-05"
@@ -12,23 +12,23 @@ tags: ["product", "strategy", "market-analysis", "mentorship"]
 classification: "internal"
 ---
 
-# DevMentor Products
+# Gather Done Products
 
 ## Product Portfolio Overview
 
 | Product | Status | Launch Date | Market |
 |---------|--------|-------------|---------|
-| DevMentor Platform | MVP Development | Q2 2025 | Global Professional Services |
+| Gather Done Platform | MVP Development | Q2 2025 | Global Professional Services |
 
 ---
 
-## DevMentor Platform
+## Gather Done Platform
 
 ### 1. Product Specifications
 
 | Attribute | Details |
 |-----------|---------|
-| **Product Name** | DevMentor Platform |
+| **Product Name** | Gather Done Platform |
 | **Product Type** | SaaS Marketplace |
 | **Launch Date** | Q2 2025 (MVP) |
 | **Platform** | Web + Mobile Responsive |
@@ -37,7 +37,7 @@ classification: "internal"
 ### 2. Offering
 
 #### What problem does it solve?
-DevMentor solves the friction and inefficiency in professional mentorship by eliminating the traditional barriers of finding qualified mentors, coordinating schedules, handling payments, and managing ongoing mentor-mentee relationships. It transforms mentorship from a networking-dependent, informal process into an accessible, professional service.
+Gather Done solves the friction and inefficiency in professional mentorship by eliminating the traditional barriers of finding qualified mentors, coordinating schedules, handling payments, and managing ongoing mentor-mentee relationships. It transforms mentorship from a networking-dependent, informal process into an accessible, professional service.
 
 #### Feature Matrix
 
@@ -88,7 +88,7 @@ DevMentor solves the friction and inefficiency in professional mentorship by eli
 
 ```mermaid
 graph TD
-    A[DevMentor Users] --> B[Mentees 70%]
+    A[Gather Done Users] --> B[Mentees 70%]
     A --> C[Mentors 30%]
     
     B --> D[Career Changer Clara 28-35]
@@ -131,14 +131,14 @@ graph TD
 | **ADPList** | Free mentorship | Free | Large network | No quality control | Volume leader |
 | **GrowthMentor** | Marketing/Growth | $40-150/hr | Growth focus | Narrow vertical | Specialized |
 | **Clarity.fm** | Expert calls | $100-500/hr | High-end experts | Complex booking | Premium positioning |
-| **DevMentor** | Professional mentorship | $50-500/hr | **Seamless UX** | **New entrant** | **Quality-focused** |
+| **Gather Done** | Professional mentorship | $50-500/hr | **Seamless UX** | **New entrant** | **Quality-focused** |
 
 #### Market Positioning Strategy
 
 ```
 High Quality ↑
             |
-    Clarity.fm    DevMentor (Target)
+    Clarity.fm    Gather Done (Target)
             |           
             |     MentorCruise
 ADPList     |           
@@ -199,4 +199,4 @@ Low Quality ↓
 
 ---
 
-*This product overview serves as the foundational document for DevMentor's go-to-market strategy, product development priorities, and business positioning.*
+*This product overview serves as the foundational document for Gather Done's go-to-market strategy, product development priorities, and business positioning.*

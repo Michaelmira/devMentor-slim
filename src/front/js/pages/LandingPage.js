@@ -105,9 +105,9 @@ const LandingPage = () => {
     <div className="bg-light min-vh-100">
       <header className=" hero">
         
-          <h1 className="header-background">Learn from the best. Find your mentor.</h1>
+          <h1 className="header-background">Learn from the best. Find your specialist.</h1>
           <p className="lead header-background text-white">
-            devMentor is the easiest way to connect with experienced developers
+            Gather Done is the easiest way to connect with experienced developers
             for one-on-one mentorship. Whether you're new to coding or an
             experienced developer looking to level up, we'll help you find the
             perfect mentor.

@@ -35,10 +35,6 @@ export const Navbar = () => {
 					<Link to="/" className="navbar-link">
 						<span className="dancing-script-text"><img src="https://res.cloudinary.com/dufs8hbca/image/upload/v1753311566/Saved/GatherDoneNoBG.png" style={{width:"150px"}}/></span>
 					</Link>
-					{/* <Link to="/">
-					<span className="navbar-brand mb-0 h1 btn btn-outline-secondary fw-bolder border-3">devMentor</span>
-				</Link> */}
-
 					<div className="d-flex gap-2">
 
 						{!store.isMentorLoggedIn &&
